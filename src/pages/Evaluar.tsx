@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { FirecrawlService } from "@/utils/FirecrawlService";
+import * as XLSX from "xlsx";
 
 interface FormData {
   nombre: string;
@@ -66,6 +67,7 @@ export default function Evaluar() {
   const [apiKey, setApiKey] = useState<string>(FirecrawlService.getApiKey() || "");
   const [uploadedName, setUploadedName] = useState<string>("");
   const [socialSignal, setSocialSignal] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [data, setData] = useState<FormData>({
     nombre: "",
@@ -83,12 +85,87 @@ export default function Evaluar() {
 
   const result = useMemo(() => computeScore(data, socialSignal), [data, socialSignal]);
 
-  const handleFile = (file?: File) => {
+  const handleFile = async (file?: File) => {
     if (!file) return;
     setUploadedName(file.name);
-    toast({ title: "Archivo cargado", description: `Se adjuntó ${file.name}` });
+    try {
+      const isPdf = /\.pdf$/i.test(file.name);
+      if (isPdf) {
+        toast({ title: "PDF cargado", description: "Para autocompletar usa Excel/CSV en esta demo", variant: "warning" as any });
+        return;
+      }
+      await parseSpreadsheet(file);
+      toast({ title: "Campos completados", description: "Información extraída del archivo" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "No se pudo leer el archivo", description: "Verifica el formato (XLSX/CSV)", variant: "destructive" });
+    }
   };
 
+  const normalizeKey = (s: string) => s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^a-z0-9_\s]/g, '')
+    .replace(/\s+/g, '_');
+
+  const toNumber = (v: any): number | undefined => {
+    if (v == null) return undefined;
+    if (typeof v === 'number' && !isNaN(v)) return v;
+    const n = Number(String(v).replace(/[^0-9.-]/g, ''));
+    return isNaN(n) ? undefined : n;
+  };
+
+  const parseSpreadsheet = async (file: File) => {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null });
+    if (!rows.length) throw new Error('Sin datos');
+    const row = rows[0];
+
+    const getByKeys = (keys: string[]): number | undefined => {
+      for (const [k, v] of Object.entries(row)) {
+        const nk = normalizeKey(k);
+        if (keys.some(key => nk.includes(key))) {
+          const num = toNumber(v);
+          if (num !== undefined) return num;
+        }
+      }
+      return undefined;
+    };
+
+    const ventasMens = (() => {
+      const mensual = getByKeys(['ventas_mensuales','ingresos_mensuales','facturacion_mensual']);
+      if (mensual !== undefined) return mensual;
+      const anual = getByKeys(['ventas','ingresos','facturacion','ventas_anuales','ingresos_anuales']);
+      return anual !== undefined ? Math.round(anual / 12) : undefined;
+    })();
+
+    let margen = getByKeys(['margen','margen_bruto','margen_%','margen_porcentaje']);
+    if (margen !== undefined) {
+      if (margen <= 1) margen = Math.round(margen * 100);
+      margen = clamp(margen, 0, 100);
+    }
+
+    const flujoCaja = getByKeys(['flujo_caja','flujo_de_caja','cash_flow','flujo_operacion','efectivo_operacion']);
+    const antiguedad = getByKeys(['antiguedad','anos','años','edad_empresa']);
+    let rating = getByKeys(['resenas','resenas_promedio','rating','promedio_resenas']);
+    if (rating !== undefined) rating = clamp(rating, 1, 5);
+    const refs = getByKeys(['referencias_positivas','referencias','ref_comerciales']);
+    const cumplimiento = getByKeys(['cumplimiento_pagos','cumplimiento','on_time_payment']);
+
+    setData(d => ({
+      ...d,
+      ventasMensuales: ventasMens ?? d.ventasMensuales,
+      margen: margen ?? d.margen,
+      flujoCaja: flujoCaja ?? d.flujoCaja,
+      antiguedad: antiguedad ?? d.antiguedad,
+      promedioResenas: rating ?? d.promedioResenas,
+      referenciasPositivas: refs ?? d.referenciasPositivas,
+      cumplimientoPagos: cumplimiento ?? d.cumplimientoPagos,
+    }));
+  };
   const handleCrawl = async () => {
     if (!data.redSocialUrl) {
       toast({ title: "URL requerida", description: "Agrega al menos una red social" });
@@ -131,6 +208,14 @@ export default function Evaluar() {
     } else {
       toast({ title: "Clave inválida", description: "Verifica tu Firecrawl API Key", variant: "destructive" });
     }
+  };
+
+  const analyzeScoring = () => {
+    const r = result;
+    toast({
+      title: "Scoring actualizado",
+      description: `Riesgo: ${r.riesgo.toUpperCase()} • Crédito: ${r.creditoRecomendado.toLocaleString('es-EC', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}`,
+    });
   };
 
   return (
@@ -188,7 +273,8 @@ export default function Evaluar() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Adjuntar estados financieros (SCVS)</Label>
-                <Input type="file" accept=".pdf,.csv,.xls,.xlsx" onChange={e => handleFile(e.target.files?.[0])} />
+                <input ref={fileRef} type="file" accept=".pdf,.csv,.xls,.xlsx" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
+                <Button variant="premium" onClick={() => fileRef.current?.click()}>Subir estados financieros</Button>
                 {uploadedName && <p className="text-sm text-muted-foreground">Adjunto: {uploadedName}</p>}
               </div>
               <div className="space-y-2">
@@ -203,7 +289,8 @@ export default function Evaluar() {
 
             <div className="flex gap-3">
               <Button variant="hero" onClick={handleCrawl} disabled={isEvaluating}>{isEvaluating ? 'Analizando…' : 'Analizar actividad digital'}</Button>
-              <Button variant="default" onClick={() => setSocialSignal(0)}>Omitir señal digital</Button>
+              <Button variant="default" onClick={() => setSocialSignal(0)}>Omitir Actividad Digital</Button>
+              <Button variant="success" onClick={analyzeScoring}>Analizar Scoring</Button>
             </div>
           </CardContent>
         </Card>

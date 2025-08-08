@@ -21,6 +21,7 @@ const buttonVariants = cva(
         // Beautiful tokens-driven variants defined in index.css
         hero: "btn-hero",
         premium: "btn-premium",
+        success: "btn-success",
       },
       size: {
         default: "h-10 px-4 py-2",
