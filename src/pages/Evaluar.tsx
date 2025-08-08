@@ -20,7 +20,9 @@ interface FormData {
   promedioResenas: number; // 1-5
   referenciasPositivas: number; // 0-10
   cumplimientoPagos: number; // 0-100
-  redSocialUrl: string;
+  xUrl: string;
+  linkedinUrl: string;
+  redSocialUrl: string; // otra (opcional)
   notas: string;
 }
 
@@ -79,6 +81,8 @@ export default function Evaluar() {
     promedioResenas: 3.5,
     referenciasPositivas: 0,
     cumplimientoPagos: 90,
+    xUrl: "",
+    linkedinUrl: "",
     redSocialUrl: "",
     notas: "",
   });
@@ -167,27 +171,28 @@ export default function Evaluar() {
     }));
   };
   const handleCrawl = async () => {
-    if (!data.redSocialUrl) {
-      toast({ title: "URL requerida", description: "Agrega al menos una red social" });
+    const urls = [data.xUrl, data.linkedinUrl, data.redSocialUrl].filter(u => !!u && u.trim().length > 0);
+    if (!urls.length) {
+      toast({ title: "URL requerida", description: "Agrega X o LinkedIn para analizar" });
       return;
     }
     setIsEvaluating(true);
     try {
-      const r = await FirecrawlService.crawlWebsite(data.redSocialUrl);
-      if (!r.success) {
-        toast({ title: "No se pudo analizar", description: r.error || "Falla al obtener datos", variant: "destructive" });
+      const settled = await Promise.allSettled(urls.map(u => FirecrawlService.crawlWebsite(u)));
+      const successes = settled.filter((s): s is PromiseFulfilledResult<{ success: boolean; data?: any }> => s.status === 'fulfilled' && (s as any).value?.success);
+      if (!successes.length) {
+        toast({ title: "No se pudo analizar", description: "No se obtuvo contenido de las redes", variant: "destructive" });
         setSocialSignal(0);
         return;
       }
-      // Señal social simple: cuenta de palabras positivas menos negativas
-      const text = JSON.stringify(r.data);
-      const positives = (text.match(/excelente|bueno|recomendado|me\s+gusta|⭐|★/gi) || []).length;
-      const negatives = (text.match(/malo|queja|reclamo|fraude|estafa|no\s+recomiendo/gi) || []).length;
-      const activity = Math.min(text.length / 5000, 1); // actividad general
+      const combinedText = successes.map(s => JSON.stringify(s.value.data)).join(" ");
+      const positives = (combinedText.match(/excelente|bueno|recomendado|me\s+gusta|⭐|★/gi) || []).length;
+      const negatives = (combinedText.match(/malo|queja|reclamo|fraude|estafa|no\s+recomiendo/gi) || []).length;
+      const activity = Math.min(combinedText.length / 7000, 1);
       const raw = (positives - negatives) / 20 + activity; // ~ -1 .. 2
       const normalized = clamp((raw + 1) / 3, 0, 1); // 0..1
       setSocialSignal(normalized);
-      toast({ title: "Actividad digital analizada", description: `Señal social: ${(normalized * 100).toFixed(0)}%` });
+      toast({ title: "Actividad digital analizada", description: `Redes analizadas: ${successes.length}/${urls.length} • Señal: ${(normalized * 100).toFixed(0)}%` });
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "No se pudo completar el análisis", variant: "destructive" });
@@ -285,9 +290,22 @@ export default function Evaluar() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="social">Red social (empresa)</Label>
-              <Input id="social" placeholder="https://facebook.com/empresa..." value={data.redSocialUrl} onChange={e => setData({ ...data, redSocialUrl: e.target.value })} />
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Redes sociales</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="x">X (Twitter)</Label>
+                  <Input id="x" placeholder="https://x.com/empresa..." value={data.xUrl} onChange={e => setData({ ...data, xUrl: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="linkedin">LinkedIn</Label>
+                  <Input id="linkedin" placeholder="https://www.linkedin.com/company/..." value={data.linkedinUrl} onChange={e => setData({ ...data, linkedinUrl: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="social">Otra red social (opcional)</Label>
+                <Input id="social" placeholder="https://facebook.com/empresa..." value={data.redSocialUrl} onChange={e => setData({ ...data, redSocialUrl: e.target.value })} />
+              </div>
             </div>
 
             <div className="space-y-2">
