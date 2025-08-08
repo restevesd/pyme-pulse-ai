@@ -285,14 +285,6 @@ export default function Evaluar() {
                   <Input id="ant" type="number" min={0} value={data.antiguedad} onChange={e => setData({ ...data, antiguedad: Number(e.target.value) })} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="resenas">Promedio reseñas (1-5)</Label>
-                  <Input id="resenas" type="number" min={1} max={5} step={0.1} value={data.promedioResenas} onChange={e => setData({ ...data, promedioResenas: Number(e.target.value) })} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="refs">Referencias positivas (0-10)</Label>
-                  <Input id="refs" type="number" min={0} max={10} value={data.referenciasPositivas} onChange={e => setData({ ...data, referenciasPositivas: Number(e.target.value) })} />
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="pagos">Cumplimiento de pagos (%)</Label>
                   <Input id="pagos" type="number" min={0} max={100} value={data.cumplimientoPagos} onChange={e => setData({ ...data, cumplimientoPagos: Number(e.target.value) })} />
                 </div>
@@ -312,7 +304,7 @@ export default function Evaluar() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="social">Otra red social (opcional)</Label>
+                <Label htmlFor="social">Facebook</Label>
                 <Input id="social" placeholder="https://facebook.com/empresa..." value={data.redSocialUrl} onChange={e => setData({ ...data, redSocialUrl: e.target.value })} />
               </div>
             </div>
@@ -324,6 +316,21 @@ export default function Evaluar() {
                 <Button variant="secondary" onClick={saveKey}>Guardar</Button>
               </div>
               <p className="text-xs text-muted-foreground">Para producción, recomendamos integrar Supabase y guardar la clave como secreto.</p>
+            </div>
+
+            {/* Reseñas y referencias debajo de Firecrawl */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Reseñas y referencias</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="resenas">Promedio reseñas (1-5)</Label>
+                  <Input id="resenas" type="number" min={1} max={5} step={0.1} value={data.promedioResenas} onChange={e => setData({ ...data, promedioResenas: Number(e.target.value) })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="refs">Referencias positivas (0-10)</Label>
+                  <Input id="refs" type="number" min={0} max={10} value={data.referenciasPositivas} onChange={e => setData({ ...data, referenciasPositivas: Number(e.target.value) })} />
+                </div>
+              </div>
             </div>
 
             {/* Acciones de actividad digital */}
