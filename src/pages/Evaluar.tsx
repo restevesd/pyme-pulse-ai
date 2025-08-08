@@ -226,7 +226,13 @@ export default function Evaluar() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-lg border">
                   <p className="text-sm text-muted-foreground">Crédito recomendado</p>
-                  <p className="text-2xl font-semibold">${'{'}result.creditoRecomendado.toLocaleString(){'}'}</p>
+                  <p className="text-2xl font-semibold">{
+                    result.creditoRecomendado.toLocaleString('es-EC', {
+                      style: 'currency',
+                      currency: 'USD',
+                      maximumFractionDigits: 0,
+                    })
+                  }</p>
                 </div>
                 <div className="p-4 rounded-lg border">
                   <p className="text-sm text-muted-foreground">Señal digital</p>
