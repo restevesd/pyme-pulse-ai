@@ -12,6 +12,7 @@ import * as XLSX from "xlsx";
 
 interface FormData {
   nombre: string;
+  ruc: string;
   sector: string;
   ventasMensuales: number; // USD
   margen: number; // 0-100
@@ -73,6 +74,7 @@ export default function Evaluar() {
 
   const [data, setData] = useState<FormData>({
     nombre: "",
+    ruc: "",
     sector: "",
     ventasMensuales: 0,
     margen: 20,
@@ -232,15 +234,22 @@ export default function Evaluar() {
             <CardDescription>Ingresa datos básicos, adjunta estados y agrega una red social para extraer señales digitales.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Identificación: Datos de empresa */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre o RUC</Label>
-                <Input id="nombre" value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })} />
+            {/* Datos de la empresa */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Datos de la empresa</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nombre">Nombre</Label>
+                  <Input id="nombre" value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sector">Sector</Label>
+                  <Input id="sector" value={data.sector} onChange={e => setData({ ...data, sector: e.target.value })} />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="sector">Sector</Label>
-                <Input id="sector" value={data.sector} onChange={e => setData({ ...data, sector: e.target.value })} />
+                <Label htmlFor="ruc">RUC</Label>
+                <Input id="ruc" value={data.ruc} onChange={e => setData({ ...data, ruc: e.target.value })} />
               </div>
             </div>
 
