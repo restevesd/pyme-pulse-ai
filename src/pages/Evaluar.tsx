@@ -227,6 +227,7 @@ export default function Evaluar() {
             <CardDescription>Ingresa datos básicos, adjunta estados y agrega una red social para extraer señales digitales.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Identificación: Datos de empresa */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="nombre">Nombre o RUC</Label>
@@ -236,60 +237,75 @@ export default function Evaluar() {
                 <Label htmlFor="sector">Sector</Label>
                 <Input id="sector" value={data.sector} onChange={e => setData({ ...data, sector: e.target.value })} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="ventas">Ventas mensuales (USD)</Label>
-                <Input id="ventas" type="number" min={0} value={data.ventasMensuales} onChange={e => setData({ ...data, ventasMensuales: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="margen">Margen bruto (%)</Label>
-                <Input id="margen" type="number" min={0} max={100} value={data.margen} onChange={e => setData({ ...data, margen: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="flujo">Flujo de caja (USD)</Label>
-                <Input id="flujo" type="number" value={data.flujoCaja} onChange={e => setData({ ...data, flujoCaja: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ant">Antigüedad (años)</Label>
-                <Input id="ant" type="number" min={0} value={data.antiguedad} onChange={e => setData({ ...data, antiguedad: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="resenas">Promedio reseñas (1-5)</Label>
-                <Input id="resenas" type="number" min={1} max={5} step={0.1} value={data.promedioResenas} onChange={e => setData({ ...data, promedioResenas: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="refs">Referencias positivas (0-10)</Label>
-                <Input id="refs" type="number" min={0} max={10} value={data.referenciasPositivas} onChange={e => setData({ ...data, referenciasPositivas: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="pagos">Cumplimiento de pagos (%)</Label>
-                <Input id="pagos" type="number" min={0} max={100} value={data.cumplimientoPagos} onChange={e => setData({ ...data, cumplimientoPagos: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="social">Red social (empresa)</Label>
-                <Input id="social" placeholder="https://facebook.com/empresa..." value={data.redSocialUrl} onChange={e => setData({ ...data, redSocialUrl: e.target.value })} />
-              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Adjuntar estados financieros (SCVS)</Label>
+            {/* Sección: Documentos (SCVS) */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Documentos (SCVS)</h4>
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
                 <input ref={fileRef} type="file" accept=".pdf,.csv,.xls,.xlsx" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
                 <Button variant="premium" onClick={() => fileRef.current?.click()}>Subir estados financieros</Button>
                 {uploadedName && <p className="text-sm text-muted-foreground">Adjunto: {uploadedName}</p>}
               </div>
-              <div className="space-y-2">
-                <Label>Firecrawl API Key (temporal)</Label>
-                <div className="flex gap-2">
-                  <Input placeholder="fc_live_..." value={apiKey} onChange={e => setApiKey(e.target.value)} />
-                  <Button variant="secondary" onClick={saveKey}>Guardar</Button>
+              <p className="text-xs text-muted-foreground">Descarga estados desde la SCVS y súbelos en Excel/CSV para autocompletar (PDF solo informativo en esta demo).</p>
+            </div>
+
+            {/* Sección: Datos básicos */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium">Datos básicos</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ventas">Ventas mensuales (USD)</Label>
+                  <Input id="ventas" type="number" min={0} value={data.ventasMensuales} onChange={e => setData({ ...data, ventasMensuales: Number(e.target.value) })} />
                 </div>
-                <p className="text-xs text-muted-foreground">Para producción, recomendamos integrar Supabase y guardar la clave como secreto.</p>
+                <div className="space-y-2">
+                  <Label htmlFor="margen">Margen bruto (%)</Label>
+                  <Input id="margen" type="number" min={0} max={100} value={data.margen} onChange={e => setData({ ...data, margen: Number(e.target.value) })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="flujo">Flujo de caja (USD)</Label>
+                  <Input id="flujo" type="number" value={data.flujoCaja} onChange={e => setData({ ...data, flujoCaja: Number(e.target.value) })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ant">Antigüedad (años)</Label>
+                  <Input id="ant" type="number" min={0} value={data.antiguedad} onChange={e => setData({ ...data, antiguedad: Number(e.target.value) })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="resenas">Promedio reseñas (1-5)</Label>
+                  <Input id="resenas" type="number" min={1} max={5} step={0.1} value={data.promedioResenas} onChange={e => setData({ ...data, promedioResenas: Number(e.target.value) })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="refs">Referencias positivas (0-10)</Label>
+                  <Input id="refs" type="number" min={0} max={10} value={data.referenciasPositivas} onChange={e => setData({ ...data, referenciasPositivas: Number(e.target.value) })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pagos">Cumplimiento de pagos (%)</Label>
+                  <Input id="pagos" type="number" min={0} max={100} value={data.cumplimientoPagos} onChange={e => setData({ ...data, cumplimientoPagos: Number(e.target.value) })} />
+                </div>
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="social">Red social (empresa)</Label>
+              <Input id="social" placeholder="https://facebook.com/empresa..." value={data.redSocialUrl} onChange={e => setData({ ...data, redSocialUrl: e.target.value })} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Firecrawl API Key (temporal)</Label>
+              <div className="flex gap-2">
+                <Input placeholder="fc_live_..." value={apiKey} onChange={e => setApiKey(e.target.value)} />
+                <Button variant="secondary" onClick={saveKey}>Guardar</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Para producción, recomendamos integrar Supabase y guardar la clave como secreto.</p>
+            </div>
+
+            {/* Acciones de actividad digital */}
             <div className="flex gap-3">
               <Button variant="hero" onClick={handleCrawl} disabled={isEvaluating}>{isEvaluating ? 'Analizando…' : 'Analizar actividad digital'}</Button>
               <Button variant="default" onClick={() => setSocialSignal(0)}>Omitir Actividad Digital</Button>
+            </div>
+            {/* Analizar scoring debajo de los botones anteriores */}
+            <div>
               <Button variant="success" onClick={analyzeScoring}>Analizar Scoring</Button>
             </div>
           </CardContent>
