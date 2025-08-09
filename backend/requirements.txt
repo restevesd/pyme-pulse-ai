@@ -1,0 +1,5 @@
+fastapi[standard]
+uvicorn
+markitdown[pdf, docx, pptx]
+openai
+python-dotenv

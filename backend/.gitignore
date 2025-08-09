@@ -1,0 +1,69 @@
+# =====================================
+# Archivos de Python
+# =====================================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de virtualenv / entorno
+.venv/
+venv/
+ENV/
+env/
+*.env
+*.env.*
+
+# Archivos de compilación / distribución
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =====================================
+# Configuración de IDEs / Editores
+# =====================================
+.vscode/
+.idea/
+*.swp
+
+# =====================================
+# Logs
+# =====================================
+*.log
+logs/
+*.out
+
+# =====================================
+# Archivos temporales
+# =====================================
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# =====================================
+# Configuración local / credenciales
+# =====================================
+config/local_*.json
+secrets.json
+
+# =====================================
+# Cache
+# =====================================
+.cache/
+pytest_cache/
+.mypy_cache/
+.pytest_cache/
+
+# =====================================
+# Archivos específicos de FastAPI / Uvicorn
+# =====================================
+# Si guardas pid o tmp de uvicorn
+uvicorn.pid
+tmp/
+
+# =====================================
+# Archivos de Docker (si aplica)
+# =====================================
+*.pid
+*.tar
