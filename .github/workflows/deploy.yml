@@ -22,6 +22,7 @@ jobs:
     env:
       COMPOSE_FILE: ${{ inputs.compose_file }}
       PROJECT_DIR: ${{ inputs.project_dir }}
+      BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
 
     steps:
       - name: Checkout
@@ -38,14 +39,12 @@ jobs:
         run: |
           rsync -a --delete --exclude ".git" ./ "$PROJECT_DIR"/
 
-      - name: Write backend .env (optional)
-        if: ${{ secrets.BACKEND_ENV }}
+      - name: Write backend .env from secret
+        if: ${{ env.BACKEND_ENV != '' }}
         run: |
-          mkdir -p "$PROJECT_DIR/backend"
-          cat > "$PROJECT_DIR/backend/.env" << 'EOF'
-          ${{ secrets.BACKEND_ENV }}
-          EOF
+          printf '%s' "$BACKEND_ENV" > "$PROJECT_DIR/backend/.env"
           chmod 600 "$PROJECT_DIR/backend/.env"
+
 
       - name: Compose up
         working-directory: ${{ env.PROJECT_DIR }}
