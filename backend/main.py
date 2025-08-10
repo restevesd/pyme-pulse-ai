@@ -296,6 +296,17 @@ def generate_markdown_report(datos_json: dict) -> str:
         raise HTTPException(status_code=500, detail="Error al generar el informe Markdown.")
 
 app = FastAPI()
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost", "http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class PDFRequest(BaseModel):
     path: str

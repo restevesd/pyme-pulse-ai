@@ -1,0 +1,59 @@
+name: Deploy (Self-Hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      compose_file:
+        description: "Ruta del docker-compose"
+        required: true
+        default: "docker-compose.yml"
+      project_dir:
+        description: "Directorio de despliegue en el servidor (runner)"
+        required: true
+        default: "/opt/pyme-pulse-ai"
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    permissions:
+      contents: read
+
+    env:
+      COMPOSE_FILE: ${{ inputs.compose_file }}
+      PROJECT_DIR: ${{ inputs.project_dir }}
+      BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Ensure project dir
+        run: |
+          sudo mkdir -p "$PROJECT_DIR"
+          sudo chown -R "$USER":"$USER" "$PROJECT_DIR"
+
+      - name: Sync repo to deploy dir
+        run: |
+          rsync -a --delete --exclude ".git" ./ "$PROJECT_DIR"/
+
+      - name: Write backend .env from secret
+        if: ${{ env.BACKEND_ENV != '' }}
+        run: |
+          printf '%s' "$BACKEND_ENV" > "$PROJECT_DIR/backend/.env"
+          chmod 600 "$PROJECT_DIR/backend/.env"
+
+
+      - name: Compose up
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          docker compose -f "$COMPOSE_FILE" down
+          docker compose -f "$COMPOSE_FILE" up -d --build
+          docker image prune -f
+
+      # Ver estado
+      - name: Check containers
+        run: |
+          docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
