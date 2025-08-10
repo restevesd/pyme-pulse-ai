@@ -8,14 +8,12 @@ import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { FirecrawlService } from "@/utils/FirecrawlService";
-import * as XLSX from "xlsx";
 
 // --- TYPE DEFINITIONS ---
 
 interface FormData {
   nombre: string;
   ruc: string;
-  sector: string;
   // ventasMensuales: number; // USD
   // margen: number; // 0-100
   // flujoCaja: number; // USD
@@ -101,7 +99,6 @@ export default function Evaluar() {
   const [data, setData] = useState<FormData>({
     nombre: "",
     ruc: "",
-    sector: "",
     promedioResenas: 3.5,
     referenciasPositivas: 0,
     xUrl: "",
@@ -230,28 +227,121 @@ export default function Evaluar() {
   const handleFile = async (file?: File) => {
     if (!file) return;
     setUploadedName(file.name);
-    try {
-      const isPdf = /\.pdf$/i.test(file.name);
-      if (isPdf) {
-        toast({ title: "PDF cargado", description: "Funcionalidad de análisis de PDF pendiente.", variant: "default" });
-        return;
-      }
-      await parseSpreadsheet(file);
-      toast({ title: "Campos completados", description: "Información extraída del archivo" });
-    } catch (e) {
-      console.error(e);
-      toast({ title: "No se pudo leer el archivo", description: "Verifica el formato (XLSX/CSV)", variant: "destructive" });
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast({ title: "Formato de archivo no válido", description: "Solo se aceptan archivos PDF.", variant: "destructive" });
+      setUploadedName("");
+      return;
     }
-  };
 
-  const parseSpreadsheet = async (file: File) => {
-    // This function is now less useful as it targets removed fields, but kept for reference
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: unknown[] = XLSX.utils.sheet_to_json(ws, { defval: null });
-    if (!rows.length) throw new Error('Sin datos');
-    // Logic to parse and set data would need to be updated for new data structure
+    setIsEvaluating(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("http://localhost:8000/analyze-pdf/", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Error al analizar el PDF.");
+      }
+
+      const result = await response.json();
+      console.log("PDF Analysis Result:", result);
+
+      // Assuming the backend returns the data in a structure that can directly update your state
+      // You'll need to map the backend response to your frontend state variables (activoCorriente, etc.)
+      // For now, let's just show a success toast.
+      toast({ title: "PDF analizado", description: "El estado financiero ha sido analizado exitosamente.", variant: "default" });
+
+      // Example of how you might update state with backend data (adjust according to actual backend response)
+      if (result.datos_json) {
+        const {
+            empresa,
+            RUC,
+            fecha,
+            moneda,
+            activo_corriente,
+            activo_no_corriente,
+            total_activo,
+            pasivo_corriente,
+            pasivo_no_corriente,
+            total_pasivo,
+            patrimonio_neto,
+            total_pasivo_patrimonio,
+        } = result.datos_json;
+
+        // Update data state
+        setData(prev => ({
+            ...prev,
+            nombre: empresa || "",
+            ruc: RUC || "",
+        }));
+
+        // Update activoCorriente state
+        setActivoCorriente(prev => ({
+            ...prev,
+            efectivo_y_equivalentes: activo_corriente?.efectivo_y_equivalentes || 0,
+            cuentas_por_cobrar: activo_corriente?.cuentas_por_cobrar || 0,
+            cuentas_por_cobrar_accionistas: activo_corriente?.cuentas_por_cobrar_accionistas || 0,
+            otros_activos_corrientes: activo_corriente?.otros_activos_corrientes || 0,
+            total_activo_corriente: activo_corriente?.total_activo_corriente || 0,
+        }));
+
+        // Update activoNoCorriente state
+        setActivoNoCorriente(prev => ({
+            ...prev,
+            inventarios: activo_no_corriente?.inventarios || 0,
+            activos_fijos: activo_no_corriente?.activos_fijos || 0,
+            activos_intangibles: activo_no_corriente?.activos_intangibles || 0,
+            otros_activos_no_corrientes: activo_no_corriente?.otros_activos_no_corrientes || 0,
+            total_activo_no_corriente: activo_no_corriente?.total_activo_no_corriente || 0,
+        }));
+
+        // Update pasivoCorriente state
+        setPasivoCorriente(prev => ({
+            ...prev,
+            cuentas_por_pagar: pasivo_corriente?.cuentas_por_pagar || 0,
+            anticipos_de_clientes: pasivo_corriente?.anticipos_de_clientes || 0,
+            otros_pasivos_corrientes: pasivo_corriente?.otros_pasivos_corrientes || 0,
+            total_pasivo_corriente: pasivo_corriente?.total_pasivo_corriente || 0,
+        }));
+
+        // Update pasivoNoCorriente state
+        setPasivoNoCorriente(prev => ({
+            ...prev,
+            deuda_largo_plazo: pasivo_no_corriente?.deuda_largo_plazo || 0,
+            otros_pasivos_no_corrientes: pasivo_no_corriente?.otros_pasivos_no_corrientes || 0,
+            total_pasivo_no_corriente: pasivo_no_corriente?.total_pasivo_no_corriente || 0,
+        }));
+
+        // Update patrimonioNeto state
+        setPatrimonioNeto(prev => ({
+            ...prev,
+            capital_suscrito: patrimonio_neto?.capital_suscrito || 0,
+            reservas: patrimonio_neto?.reservas || 0,
+            resultados_acumulados: patrimonio_neto?.resultados_acumulados || 0,
+            ganancia_perdida_ejercicio: patrimonio_neto?.ganancia_perdida_ejercicio || 0,
+            total_patrimonio_neto: patrimonio_neto?.total_patrimonio_neto || 0,
+        }));
+
+        // Update calculated totals
+        setTotalActivo(total_activo || 0);
+        setTotalPasivo(total_pasivo || 0);
+        setTotalPasivoPatrimonio(total_pasivo_patrimonio || 0);
+
+        toast({ title: "Datos financieros cargados", description: "Los campos del balance han sido actualizados.", variant: "default" });
+      }
+
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Error al analizar el PDF", description: e.message || "Hubo un problema al procesar el archivo.", variant: "destructive" });
+      setUploadedName("");
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   const handleCrawl = async () => {
@@ -319,29 +409,25 @@ export default function Evaluar() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
+              <h4 className="text-sm font-medium">Documentos (SCVS)</h4>
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
+                <Button variant="premium" onClick={() => fileRef.current?.click()}>Subir Estado Financiero</Button>
+                {uploadedName && <p className="text-sm text-muted-foreground">Adjunto: {uploadedName}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-3">
               <h4 className="text-sm font-medium">Datos de la Empresa</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="nombre">Nombre</Label>
                   <Input id="nombre" value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sector">Sector</Label>
-                  <Input id="sector" value={data.sector} onChange={e => setData({ ...data, sector: e.target.value })} />
-                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="ruc">RUC</Label>
                 <Input id="ruc" value={data.ruc} onChange={e => setData({ ...data, ruc: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium">Documentos (SCVS)</h4>
-              <div className="flex flex-col sm:flex-row gap-3 items-start">
-                <input ref={fileRef} type="file" accept=".pdf,.csv,.xls,.xlsx" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
-                <Button variant="premium" onClick={() => fileRef.current?.click()}>Subir Estados Financieros</Button>
-                {uploadedName && <p className="text-sm text-muted-foreground">Adjunto: {uploadedName}</p>}
               </div>
             </div>
 
