@@ -1,7 +1,7 @@
 # Build
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
+COPY frontend/package.json frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
 RUN npm ci
 COPY . .
 RUN npm run build
