@@ -1,45 +1,41 @@
-# Archivos y carpetas de dependencias
-node_modules
-npm-debug.log
-yarn-debug.log
-yarn-error.log
-pnpm-debug.log
-
-# Salidas de compilación locales
-.next
-out
-dist
-build
-
-# Archivos del sistema
-.DS_Store
-Thumbs.db
-
-# Archivos de entorno
-.env
-.env.local
-.env.development
-.env.test
-.env.production
-
-# Archivos de VCS
+# VCS / meta
 .git
 .gitignore
+.github
 .gitattributes
 
-# Archivos de editor / IDE
-.vscode
-.idea
-*.swp
+# Node / build outputs
+node_modules
+dist
+dist-ssr
+coverage
 
-# Archivos de test
-__tests__/
-coverage/
-*.spec.js
-*.spec.ts
-*.test.js
-*.test.ts
+# Caches
+.vite
+.vitest
+.cache
+.eslintcache
+.turbo
 
 # Logs
 logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env
+.env
+.env.*
+*.local
+
+# Editors / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docker / tooling
+Dockerfile
+docker-compose*.yml

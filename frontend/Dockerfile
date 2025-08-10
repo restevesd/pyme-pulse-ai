@@ -1,21 +1,22 @@
-# Build
-FROM node:20-alpine AS builder
+# Multi-stage Dockerfile to build and serve the React SPA (Vite)
+# Build context: project/frontend
+# Place this file at: project/frontend/Dockerfile
+
+# 1) Build stage
+FROM node:20-alpine AS build
 WORKDIR /app
-COPY frontend/package.json frontend/package-lock.json* frontend/pnpm-lock.yaml* ./
+COPY package.json package-lock.json ./
 RUN npm ci
-COPY frontend/ .
+COPY . .
+# Parametriza la URL base del API (se inyecta en build)
+ARG VITE_API_BASE_URL="http://localhost:8000"
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build
 
-# Runtime
-FROM node:20-alpine AS runner
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-WORKDIR /app
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/package-lock.json ./
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-# Solo prod deps (si usas npm ci --omit=dev ya no copies node_modules)
-RUN npm ci --omit=dev
-EXPOSE 3000
-CMD ["npm", "start"]  # "start": "next start"
+# 2) Run stage (Nginx)
+FROM nginx:alpine
+# Conf para SPA: fallback a index.html para rutas de React Router
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
