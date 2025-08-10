@@ -1,21 +1,19 @@
 import os
 import re
 import json
+from io import BytesIO
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from typing import Any
 from markitdown import MarkItDown
 from openai import OpenAI
 from dotenv import load_dotenv
 from fastapi import UploadFile, File
-from fastapi.responses import JSONResponse
-import io
-from PyPDF2 import PdfReader
 
 # Cargar variables de entorno desde .env
 load_dotenv()
 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 # Configuración del cliente de DeepSeek
-DEEPSEEK_API_KEY = "sk-4c9d6fcc63954d11a0e7aded65948eee"
 if not DEEPSEEK_API_KEY:
     raise ValueError("No se encontró la API Key de DeepSeek en las variables de entorno.")
 
@@ -308,9 +306,6 @@ app.add_middleware(
 )
 
 
-class PDFRequest(BaseModel):
-    path: str
-
 def analyze_with_deepseek(text_content: str) -> dict:
     """
     Analiza el texto extraído con DeepSeek y devuelve un diccionario JSON.
@@ -370,35 +365,49 @@ def analyze_markdownd_with_deepseek(text_content: str) -> dict:
         raise HTTPException(status_code=500, detail="Error al analizar el documento con el modelo de IA.")
 
 @app.post("/analyze-pdf/")
-async def analyze_pdf(request: PDFRequest):
+async def analyze_pdf(file: UploadFile = File(..., description="PDF a convertir")) -> Any:
     """
-    Recibe la ruta de un PDF, lo lee, lo analiza con DeepSeek y devuelve el JSON.
+    Recibe un PDF de un estado financiero, lo lee, lo analiza con DeepSeek y devuelve el JSON.
     """
     try:
+        
+        if file.content_type not in ("application/pdf", "application/x-pdf", "application/octet-stream"):
+            raise HTTPException(status_code=400, detail="Solo se acepta PDF")
+    
+        # Leemos el PDF a memoria y lo convertimos
+        data = await file.read()
+        if not data:
+            raise ValueError("Archivo vacío")
+    
         # Inicializar MarkItDown y convertir el PDF
         md = MarkItDown()
-        result = md.convert(request.path)
+        result = md.convert_stream(BytesIO(data), file_name=file.filename)
         
         if not result.text_content:
             raise HTTPException(status_code=400, detail="No se pudo extraer texto del PDF.")
-
         
-        # Convertir a markdown
-        md = MarkItDown()
-        result = md.convert(result.text_content)  
-        
-        if not result.text_content:
-            raise HTTPException(400, "No se pudo extraer texto")
+        print(f"Texto extraído del PDF: {result.text_content[:100]}...")
         
         # Analizar con DeepSeek
         datos_json = analyze_with_deepseek(result.text_content)
-        markdown_report = generate_markdown_report(datos_json)
-        scoring = analyze_markdownd_with_deepseek(markdown_report)
+        print(f"Datos JSON extraídos con Deepseek: {datos_json}")
         
-        return markdown_report, scoring
+        markdown_report = generate_markdown_report(datos_json)
+        print(f"Informe Markdown generado: {markdown_report[:100]}...")
+        
+        scoring = analyze_markdownd_with_deepseek(markdown_report)
+        print(f"Scoring obtenido: {scoring}")
+        
+        result = {
+            "datos_json": datos_json,
+            "markdown_report": str(markdown_report),
+            "scoring": scoring
+        }
+        
+        return result
         
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, f'Error Interno {str(e)}')
 
 @app.get("/")
 def read_root():
