@@ -12,6 +12,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package-lock.json ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 # Solo prod deps (si usas npm ci --omit=dev ya no copies node_modules)
