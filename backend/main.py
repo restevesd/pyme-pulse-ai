@@ -8,8 +8,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from fastapi import UploadFile, File
 from fastapi.responses import JSONResponse
-import io
-from PyPDF2 import PdfReader
+from fastapi.middleware.cors import CORSMiddleware
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -295,8 +294,6 @@ def generate_markdown_report(datos_json: dict) -> str:
         print(f"Error al generar el informe Markdown: {e}")
         raise HTTPException(status_code=500, detail="Error al generar el informe Markdown.")
 
-app = FastAPI()
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 app.add_middleware(
@@ -306,8 +303,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
 class PDFRequest(BaseModel):
     path: str
 
@@ -382,20 +377,24 @@ async def analyze_pdf(request: PDFRequest):
         if not result.text_content:
             raise HTTPException(status_code=400, detail="No se pudo extraer texto del PDF.")
 
-        
         # Convertir a markdown
         md = MarkItDown()
         result = md.convert(result.text_content)  
         
         if not result.text_content:
-            raise HTTPException(400, "No se pudo extraer texto")
-        
+            raise HTTPException(400, "No se pudo extraer texto")        
         # Analizar con DeepSeek
         datos_json = analyze_with_deepseek(result.text_content)
         markdown_report = generate_markdown_report(datos_json)
-        scoring = analyze_markdownd_with_deepseek(markdown_report)
+        report_scoring = analyze_markdownd_with_deepseek(markdown_report)
         
-        return markdown_report, scoring
+        final = {
+            "datos_json": datos_json,
+            "markdown_report": markdown_report,
+            "report_scoring": report_scoring
+        }
+        
+        return final
         
     except Exception as e:
         raise HTTPException(500, str(e))
