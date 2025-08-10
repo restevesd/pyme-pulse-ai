@@ -8,6 +8,7 @@ from markitdown import MarkItDown
 from openai import OpenAI
 from dotenv import load_dotenv
 from fastapi import UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -293,8 +294,6 @@ def generate_markdown_report(datos_json: dict) -> str:
         print(f"Error al generar el informe Markdown: {e}")
         raise HTTPException(status_code=500, detail="Error al generar el informe Markdown.")
 
-app = FastAPI()
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 app.add_middleware(
@@ -304,7 +303,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 def analyze_with_deepseek(text_content: str) -> dict:
     """
