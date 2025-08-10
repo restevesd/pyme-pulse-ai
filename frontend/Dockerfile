@@ -1,23 +1,20 @@
-# ---- build stage ----
-FROM node:20-alpine AS build
+# Build
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Instala deps
-COPY frontend/package*.json ./
-# Si usas bun.lockb, puedes cambiar a bun; con npm:
-RUN --mount=type=cache,target=/root/.npm npm ci
-
-# Copia código y build
-COPY frontend/ .
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
+RUN npm ci
+COPY . .
 RUN npm run build
 
-# ---- run stage (nginx) ----
-FROM nginx:1.25-alpine
-# limpia default y agrega nuestra config
-RUN rm /etc/nginx/conf.d/default.conf
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copia artefactos estáticos
-COPY --from=build /app/dist /usr/share/nginx/html
-
-EXPOSE 80
+# Runtime
+FROM node:20-alpine AS runner
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+WORKDIR /app
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+# Solo prod deps (si usas npm ci --omit=dev ya no copies node_modules)
+RUN npm ci --omit=dev
+EXPOSE 3000
+CMD ["npm", "start"]  # "start": "next start"

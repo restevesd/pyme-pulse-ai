@@ -1,5 +1,45 @@
-node_modules/
-dist/
+# Archivos y carpetas de dependencias
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Salidas de compilación locales
+.next
+out
+dist
+build
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de entorno
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Archivos de VCS
 .git
 .gitignore
+.gitattributes
+
+# Archivos de editor / IDE
+.vscode
+.idea
+*.swp
+
+# Archivos de test
+__tests__/
+coverage/
+*.spec.js
+*.spec.ts
+*.test.js
+*.test.ts
+
+# Logs
+logs
 *.log
