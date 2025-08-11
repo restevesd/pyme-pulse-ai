@@ -231,11 +231,13 @@ def analyze_FB_with_deepseek(text_content: list) -> dict:
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:8080"],
+    allow_origins=["http://localhost", "http://localhost:8080","http://socialcredit.masappec.com/"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 @app.get("/x-posts/{username}")
 async def get_x_posts(username: str):
