@@ -3,3 +3,5 @@ uvicorn
 markitdown[pdf, docx, pptx]
 openai
 python-dotenv
+python-multipart
+PyPDF2 

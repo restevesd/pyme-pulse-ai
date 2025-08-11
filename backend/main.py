@@ -9,271 +9,22 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from fastapi import UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from prompts import *
+from fastapi import Query,Body
+from starlette.responses import Response
 
 # Cargar variables de entorno desde .env
+
 load_dotenv()
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
 # Configuración del cliente de DeepSeek
 if not DEEPSEEK_API_KEY:
     raise ValueError("No se encontró la API Key de DeepSeek en las variables de entorno.")
 
 client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
-PROMPT_MARKDOWN_A_JSON = (
-    "Tarea: Convertir Análisis Financiero en Markdown a JSON\n\n"
-    "Eres un asistente especializado en procesamiento de datos financieros. "
-    "Tu tarea es analizar un texto en formato markdown que contiene un análisis de salud financiera para otorgamiento de crédito "
-    "y convertirlo a un JSON estructurado siguiendo exactamente el esquema que se especifica.\n\n"
-    "Instrucciones:\n"
-    "1. Analiza cuidadosamente el markdown proporcionado que contiene un análisis financiero con la siguiente estructura:\n"
-    "   - Encabezado con información de empresa, moneda y fecha\n"
-    "   - Sección de indicadores clave con 5 dimensiones (Liquidez Inmediata, Solvencia y Endeudamiento, Rentabilidad, "
-    "Calidad de Activos, Flexibilidad Financiera)\n"
-    "   - Cada indicador incluye: dato clave, justificación, riesgo, puntuación y motivo\n"
-    "   - Conclusión final con puntuación total, diagnóstico (fortalezas y debilidades) y recomendación\n\n"
-    "2. Extrae toda la información relevante y organízala en el siguiente esquema JSON:\n"
-    "{\n"
-    '  "empresa": "",\n'
-    '  "moneda": "",\n'
-    '  "fecha": "",\n'
-    '  "indicadores": [\n'
-    "    {\n"
-    '      "nombre": "",\n'
-    '      "peso": 0,\n'
-    '      "dato_clave": "",\n'
-    '      "justificacion": "",\n'
-    '      "riesgo": "",\n'
-    '      "puntuacion": 0,\n'
-    '      "motivo": ""\n'
-    "    }\n"
-    "  ],\n"
-    '  "conclusion_final": {\n'
-    '    "puntuacion_total": 0,\n'
-    '    "diagnostico": {\n'
-    '      "fortalezas": [],\n'
-    '      "debilidades": []\n'
-    "    },\n"
-    '    "recomendacion_credito": "",\n'
-    '    "detalle_recomendacion": ""\n'
-    "  }\n"
-    "}\n\n"
-    "Reglas de conversión:\n"
-    "- Extrae exactamente los valores numéricos para los campos \"peso\" y \"puntuacion\" (sin texto adicional)\n"
-    '- Para "riesgo", extrae solo el nivel (Bajo, Moderado, Alto, etc.)\n'
-    "- En \"diagnostico\", convierte las listas de fortalezas y debilidades en arrays de strings\n"
-    '- Para "recomendacion_credito", extrae solo el término principal (Aprobado, Rechazado, Condicionado, etc.)\n'
-    '- En "detalle_recomendacion", incluye el texto completo de la recomendación\n\n'
-    "Procesa el texto markdown y devuelve únicamente el objeto JSON anterior, sin texto adicional."
-)
-
-
-# Prompt para DeepSeek
-PROMPT_DEEPSEEK = (
-    "Tu tarea es analizar un documento PDF de varias páginas que contiene un \"Estado de Flujo de Efectivo por el Método Directo\" "
-    "y otra información relevante de una empresa. "
-    "Debes procesar el documento completo y devolver toda la información clave en un único objeto JSON estructurado.\n\n"
-    "Instrucciones:\n"
-    "1. Análisis Completo: Lee y analiza el contenido de todas las páginas del PDF proporcionado.\n"
-    "2. Extracción de Datos Clave: Identifica y extrae las siguientes secciones de información:\n"
-    "   • Información General de la Empresa: Ubicada en la cabecera del documento (Razón Social, Dirección, Expediente, RUC, Año, Formulario).\n"
-    "   • Estado de Flujo de Efectivo: Extrae cada línea de cuenta con su respectivo CUENTA, CÓDIGO y SALDOS BALANCE. "
-    "   Presta atención a la estructura jerárquica.\n"
-    "   • Firmantes: Extrae los datos del Representante Legal y del Contador, incluyendo sus nombres completos y números de identificación.\n"
-    "   • Resumen de Efectivo: Identifica y extrae por separado los valores clave como el efectivo al inicio y al final del periodo.\n"
-    "3. Formato de Salida JSON: Estructura todos los datos extraídos en un único objeto JSON, siguiendo el formato exacto que se detalla a continuación.\n"
-    "4. Tipos de Datos: Asegúrate de que todos los saldos monetarios se representen como números (tipo number), no como cadenas de texto (tipo string). "
-    "Por ejemplo, 23691.91 en lugar de \"23691.91\".\n"
-    "5. Jerarquía: Organiza las cuentas del estado de flujo de efectivo en las categorías principales: actividadesDeOperacion, actividadesDeInversion, "
-    "actividadesDeFinanciacion y una categoría para los ajustes y otros cambios.\n\n"
-    "Formato JSON de Salida Requerido:\n"
-    "{\n"
-    '  \"informacionGeneral\": {\n'
-    '    \"razonSocial\": \"MASAPP S.A.\",\n'
-    '    \"direccion\": \"AGUNTIN FREIRE Y MZ AC No. V 11 BARRIO: NORTE\",\n'
-    '    \"expediente\": \"300220\",\n'
-    '    \"ruc\": \"0992885971001\",\n'
-    '    \"ano\": 2024,\n'
-    '    \"formulario\": \"SCV.NIIF.300220.2024.1\"\n'
-    "  },\n"
-    '  \"estadoDeFlujoEfectivo\": {\n'
-    '    \"actividadesDeOperacion\": {\n'
-    '      \"titulo\": \"FLUJOS DE EFECTIVO PROCEDENTES DE (UTILIZADOS EN) ACTIVIDADES DE OPERACIÓN\",\n'
-    '      \"codigo\": \"9501\",\n'
-    '      \"saldoTotal\": 0.00,\n'
-    '      \"items\": [\n'
-    "        {\n"
-    '          \"cuenta\": \"Cobros procedentes de las ventas de bienes y prestación de servicios\",\n'
-    '          \"codigo\": \"95010101\",\n'
-    '          \"saldo\": 0.00\n'
-    "        },\n"
-    "        {\n"
-    '          \"cuenta\": \"Cobros procedentes de regalías, cuotas, comisiones y otros ingresos de actividades ordinarias\",\n'
-    '          \"codigo\": \"95010102\",\n'
-    '          \"saldo\": 0.00\n'
-    "        }\n"
-    "      ]\n"
-    "    },\n"
-    '    \"actividadesDeInversion\": {\n'
-    '      \"titulo\": \"FLUJOS DE EFECTIVO PROCEDENTES DE (UTILIZADOS EN) ACTIVIDADES DE INVERSIÓN\",\n'
-    '      \"codigo\": \"9502\",\n'
-    '      \"saldoTotal\": 0.00,\n'
-    '      \"items\": [\n'
-    "        {\n"
-    '          \"cuenta\": \"Efectivo procedentes de la venta de acciones en subsidiarias u otros negocios\",\n'
-    '          \"codigo\": \"950201\",\n'
-    '          \"saldo\": 0.00\n'
-    "        },\n"
-    "        {\n"
-    '          \"cuenta\": \"Efectivo utilizado para adquirir acciones en subsidiarias u otros negocios para tener el control\",\n'
-    '          \"codigo\": \"950202\",\n'
-    '          \"saldo\": 0.00\n'
-    "        }\n"
-    "      ]\n"
-    "    },\n"
-    '    \"actividadesDeFinanciacion\": {\n'
-    '      \"titulo\": \"FLUJOS DE EFECTIVO PROCEDENTES DE (UTILIZADOS EN) ACTIVIDADES DE FINANCIACIÓN\",\n'
-    '      \"codigo\": \"9503\",\n'
-    '      \"saldoTotal\": 0.00,\n'
-    '      \"items\": [\n'
-    "        {\n"
-    '          \"cuenta\": \"Aporte en efectivo por aumento de capital\",\n'
-    '          \"codigo\": \"950301\",\n'
-    '          \"saldo\": 0.00\n'
-    "        },\n"
-    "        {\n"
-    '          \"cuenta\": \"Financiamiento por emisión de títulos valores\",\n'
-    '          \"codigo\": \"950302\",\n'
-    '          \"saldo\": 0.00\n'
-    "        }\n"
-    "      ]\n"
-    "    },\n"
-    '    \"ajustesYOtros\": {\n'
-    '      \"items\": [\n'
-    "        {\n"
-    '          \"cuenta\": \"GANANCIA (PÉRDIDA) ANTES DE 15% A TRABAJADORES E IMPUESTO A LA RENTA\",\n'
-    '          \"codigo\": \"96\",\n'
-    '          \"saldo\": 0.00\n'
-    "        },\n"
-    "        {\n"
-    '          \"cuenta\": \"Ajustes por gasto de depreciación y amortización\",\n'
-    '          \"codigo\": \"9701\",\n'
-    '          \"saldo\": 0.00\n'
-    "        },\n"
-    "        {\n"
-    '          \"cuenta\": \"(Incremento) disminución en cuentas por cobrar clientes\",\n'
-    '          \"codigo\": \"9801\",\n'
-    '          \"saldo\": 0.00\n'
-    "        }\n"
-    "      ]\n"
-    "    }\n"
-    "  },\n"
-    '  \"resumenEfectivo\": {\n'
-    '    \"incrementoNeto\": {\n'
-    '      \"cuenta\": \"INCREMENTO (DISMINUCIÓN) NETO DE EFECTIVO Y EQUIVALENTES AL EFECTIVO\",\n'
-    '      \"codigo\": \"9505\",\n'
-    '      \"saldo\": 0.00\n'
-    "    },\n"
-    '    \"efectivoAlPrincipioPeriodo\": {\n'
-    '      \"cuenta\": \"EFECTIVO Y EQUIVALENTES AL EFECTIVO AL PRINCIPIO DEL PERIODO\",\n'
-    '      \"codigo\": \"9506\",\n'
-    '      \"saldo\": 23691.91\n'
-    "    },\n"
-    '    \"efectivoAlFinalPeriodo\": {\n'
-    '      \"cuenta\": \"EFECTIVO Y EQUIVALENTES AL EFECTIVO AL FINAL DEL PERIODO\",\n'
-    '      \"codigo\": \"9507\",\n'
-    '      \"saldo\": 23691.91\n'
-    "    }\n"
-    "  },\n"
-    '  \"firmantes\": {\n'
-    '    \"representanteLegal\": {\n'
-    '      \"nombre\": \"ESTEVES DELGADO ROBERTO JAVIER\",\n'
-    '      \"identificacion\": \"0917583791\"\n'
-    "    },\n"
-    '    \"contador\": {\n'
-    '      \"nombre\": \"PEREZ NAARA\",\n'
-    '      \"identificacion\": \"0925688145\"\n'
-    "    }\n"
-    "  }\n"
-    "}\n\n"
-    "Tarea:\n"
-    "Aplica estas instrucciones al documento PDF proporcionado y genera el objeto JSON completo y preciso como resultado."
-)
-
-PLANTILLA_ANALISIS_CREDITO = (
-    "Análisis de Salud Financiera para Otorgamiento de Crédito\n"
-    "Empresa: {empresa}\n"
-    "Moneda: {moneda}\n"
-    "Fecha: {fecha}\n\n"
-    "Indicadores Clave y Ponderación (Total: 10 puntos)\n"
-    "Se evalúan 5 dimensiones críticas para otorgar crédito, asignando pesos según su impacto en la solvencia y liquidez de la empresa.\n\n" \
-    " 1. **Analiza los datos financieros** del JSON proporcionado, que sigue esta estructura:\n"
-   "- Datos de identificación (empresa, fecha, moneda)\n"
-   "- Activo corriente y no corriente desglosado\n"
-   "- Pasivo corriente y no corriente desglosado\n"
-   "- Patrimonio neto desglosado\n"
-   "- Totales de activo, pasivo y patrimonio\n"
-
-"2. **Evalúa 5 dimensiones críticas** para otorgamiento de crédito, asignando los siguientes pesos:\n"
- "  - Liquidez Inmediata (3 puntos)\n"
-  " - Solvencia y Endeudamiento (2 puntos)\n"
-   "- Rentabilidad (2 puntos)\n"
-   "- Calidad de Activos (2 puntos)\n"
-   "- Flexibilidad Financiera (1 punto)\n"
-
-"3. **Para cada dimensión, incluye**:\n"
- "  - Datos clave relevantes extraídos del JSON\n"
-  " - Justificación basada en los datos\n"
-   "- Riesgos identificados\n"
-   "- Puntuación parcial (según el peso de la dimensión) y motivo\n"
-
-"4. **Elabora una conclusión final** que contenga:\n"
- "  - Puntuación total (sobre 10 puntos)\n"
-  " - Diagnóstico detallado (fortalezas y debilidades)\n"
-   "- Recomendación clara para otorgamiento de crédito (aprobado, rechazado o aprobado con condiciones)\n"
-    "Consideraciones para el análisis:\n"
-    "- **Liquidez Inmediata**: Evalúa la capacidad de la empresa para cumplir con sus obligaciones a corto plazo. Considera la proporción de efectivo y equivalentes respecto al activo corriente.\n"
-    "- **Solvencia y Endeudamiento**: Analiza la estructura de capital de la empresa, la relación entre deuda y patrimonio, y la composición de los pasivos.\n"
-    " - **Rentabilidad**: Examina la capacidad de generar beneficios, calculando indicadores como ROE (Return on Equity) si es posible con los datos disponibles.\n"
-    "- **Calidad de Activos**: Evalúa la composición y diversificación de los activos, identificando posibles riesgos de concentración o iliquidez.\n"
-    "- **Flexibilidad Financiera**: Considera la capacidad de la empresa para absorber pérdidas y hacer frente a imprevistos, analizando reservas y resultados acumulados.\n"
-    "Liquidez Inmediata (Peso: 3 puntos)\n"
-    "Dato clave: {dato_liquidez}\n"
-    "Justificación:\n{justificacion_liquidez}\n"
-    "Riesgo: {riesgo_liquidez}\n"
-    "Puntuación: {puntuacion_liquidez}/3\n"
-    "Motivo: {motivo_liquidez}\n\n"
-    "Solvencia y Endeudamiento (Peso: 2 puntos)\n"
-    "Dato clave: {dato_solvencia}\n"
-    "Justificación:\n{justificacion_solvencia}\n"
-    "Riesgo: {riesgo_solvencia}\n"
-    "Puntuación: {puntuacion_solvencia}/2\n"
-    "Motivo: {motivo_solvencia}\n\n"
-    "Rentabilidad (Peso: 2 puntos)\n"
-    "Dato clave: {dato_rentabilidad}\n"
-    "Justificación:\n{justificacion_rentabilidad}\n"
-    "Riesgo: {riesgo_rentabilidad}\n"
-    "Puntuación: {puntuacion_rentabilidad}/2\n"
-    "Motivo: {motivo_rentabilidad}\n\n"
-    "Calidad de Activos (Peso: 2 puntos)\n"
-    "Dato clave: {dato_calidad}\n"
-    "Justificación:\n{justificacion_calidad}\n"
-    "Riesgo: {riesgo_calidad}\n"
-    "Puntuación: {puntuacion_calidad}/2\n"
-    "Motivo: {motivo_calidad}\n\n"
-    "Flexibilidad Financiera (Peso: 1 punto)\n"
-    "Dato clave: {dato_flexibilidad}\n"
-    "Justificación:\n{justificacion_flexibilidad}\n"
-    "Riesgo: {riesgo_flexibilidad}\n"
-    "Puntuación: {puntuacion_flexibilidad}/1\n"
-    "Motivo: {motivo_flexibilidad}\n\n"
-    "Conclusión Final\n"
-    "Puntuación Total: {puntuacion_total}/10\n"
-    "Diagnóstico:\n"
-    "Fortalezas: {fortalezas}\n"
-    "Debilidades: {debilidades}\n\n"
-    "Recomendación para Crédito: {recomendacion}"
-)
 
 def generate_markdown_report(datos_json: dict) -> str:
     """
@@ -284,25 +35,16 @@ def generate_markdown_report(datos_json: dict) -> str:
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Eres un analista financiero especializado en evaluación de crédito. Tu tarea es realizar un análisis completo de salud financiera para determinar si una empresa es candidata a recibir crédito, utilizando los datos proporcionados en formato JSON."
-                 + PLANTILLA_ANALISIS_CREDITO+ " no agregar ninguna otra información adicional solamente el análisis de salud financiera y la estructura del análisis y presentar el resultado en markdown"},
+                 + PLANTILLA_ANALISIS_CREDITO + " no agregar ninguna otra información adicional solamente el análisis de salud financiera y la estructura del análisis y presentar el resultado en markdown"},
                 {"role": "user", "content": "Usa esta información para extraer los datos y hacer el análisis" + str(datos_json)},
             ],
+            temperature=0,
             stream=False
         )
         return response.choices[0].message.content
     except Exception as e:
         print(f"Error al generar el informe Markdown: {e}")
         raise HTTPException(status_code=500, detail="Error al generar el informe Markdown.")
-
-
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:8080"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 def analyze_with_deepseek(text_content: str) -> dict:
     """
@@ -312,9 +54,10 @@ def analyze_with_deepseek(text_content: str) -> dict:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Eres un asistente de IA experto en la extracción de datos de documentos financieros." + PROMPT_DEEPSEEK},
+                {"role": "system", "content": "Eres un asistente de IA experto en la extracción de datos de documentos financieros." + PROMPT_BALANCE_SHEET },
                 {"role": "user", "content": "Usa esta información para extraer los datos y hacerlos json" + text_content},
             ],
+            temperature=0,
             stream=False
         )
         
@@ -341,9 +84,10 @@ def analyze_markdownd_with_deepseek(text_content: str) -> dict:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Eres un asistente de IA experto en la extracción de datos de documentos financieros." + PROMPT_MARKDOWN_A_JSON},
+                {"role": "system", "content": "Eres un asistente de IA experto en la extracción de datos de documentos financieros." +  PROMPT_MARKDOWN_A_JSON},
                 {"role": "user", "content": "Usa esta información para extraer los datos y hacerlos json" + text_content},
             ],
+            temperature=0,
             stream=False
         )
         
@@ -361,6 +105,355 @@ def analyze_markdownd_with_deepseek(text_content: str) -> dict:
     except Exception as e:
         print(f"Error durante el análisis con DeepSeek: {e}")
         raise HTTPException(status_code=500, detail="Error al analizar el documento con el modelo de IA.")
+    
+def analyze_X_with_deepseek(text_content: list) -> dict:
+    """
+    Analiza el texto extraído con DeepSeek y devuelve un diccionario JSON.
+    """
+    try:
+        # Convertir la lista de JSON a string para incluirla en el prompt
+        # Si text_content contiene diccionarios, los convertimos a JSON string
+        if isinstance(text_content, list):
+            # Si los elementos son diccionarios, los convertimos a JSON string
+            text_content_str = "\n".join([
+                json.dumps(item, ensure_ascii=False) if isinstance(item, dict) else str(item) 
+                for item in text_content
+            ])
+        else:
+            text_content_str = str(text_content)
+        
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "Eres un asistente de IA experto en la extracción de datos y análisis de redes sociales como X(Twitter) " +  PROMPT_ANALISIS_TWEETS},
+                {"role": "user", "content": "Usa esta información para extraer los datos y hacerlos json" + text_content_str},
+            ],
+            temperature=0,
+            stream=False
+        )
+        
+        resultado = response.choices[0].message.content
+        
+        # 1. Eliminar ``` o ```json
+        patron = re.compile(r'^```(?:json)?\s*|```$', re.MULTILINE)
+        texto_limpio = patron.sub('', resultado).strip()
+
+        # 2. Convertir a JSON (diccionario Python)
+        datos_json = json.loads(texto_limpio)
+        
+        return datos_json
+    except Exception as e:
+        print(f"Error durante el análisis con DeepSeek: {e}")
+        raise HTTPException(status_code=500, detail="Error al analizar el documento con el modelo de IA.")
+
+def analyze_LNK_with_deepseek(text_content: list) -> dict:
+    """
+    Analiza el texto extraído con DeepSeek y devuelve un diccionario JSON.
+    """
+    try:
+        # Convertir la lista de JSON a string para incluirla en el prompt
+        # Si text_content contiene diccionarios, los convertimos a JSON string
+        if isinstance(text_content, list):
+            # Si los elementos son diccionarios, los convertimos a JSON string
+            text_content_str = "\n".join([
+                json.dumps(item, ensure_ascii=False) if isinstance(item, dict) else str(item) 
+                for item in text_content
+            ])
+        else:
+            text_content_str = str(text_content)
+        
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "Eres un asistente de IA experto en la extracción de datos y análisis de redes sociales como LINKEDIN" +  PROMPT_RELEVANCIA_LINKEDIN},
+                {"role": "user", "content": "Usa esta información para extraer los datos y hacerlos json" + text_content_str},
+            ],
+            temperature=0,
+            stream=False
+        )
+        
+        resultado = response.choices[0].message.content
+        
+        # 1. Eliminar ``` o ```json
+        patron = re.compile(r'^```(?:json)?\s*|```$', re.MULTILINE)
+        texto_limpio = patron.sub('', resultado).strip()
+
+        # 2. Convertir a JSON (diccionario Python)
+        datos_json = json.loads(texto_limpio)
+        
+        return datos_json
+
+    except Exception as e:
+        print(f"Error durante el análisis con DeepSeek: {e}")
+        raise HTTPException(status_code=500, detail="Error al analizar el documento con el modelo de IA.")
+    
+def analyze_FB_with_deepseek(text_content: list) -> dict:
+    """
+    Analiza el texto extraído con DeepSeek y devuelve un diccionario JSON.
+    """
+    try:
+        # Convertir la lista de JSON a string para incluirla en el prompt
+        # Si text_content contiene diccionarios, los convertimos a JSON string
+        if isinstance(text_content, list):
+            # Si los elementos son diccionarios, los convertimos a JSON string
+            text_content_str = "\n".join([
+                json.dumps(item, ensure_ascii=False) if isinstance(item, dict) else str(item) 
+                for item in text_content
+            ])
+        else:
+            text_content_str = str(text_content)
+        
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "Eres un asistente de IA experto en la extracción de datos y análisis de redes sociales como FACEBOOK" +  PROMPT_RELEVANCIA_FACEBOOK},
+                {"role": "user", "content": "Usa esta información para extraer los datos y hacerlos json" + text_content_str},
+            ],
+            temperature=0,
+            stream=False
+        )
+        
+        resultado = response.choices[0].message.content
+        
+        # 1. Eliminar ``` o ```json
+        patron = re.compile(r'^```(?:json)?\s*|```$', re.MULTILINE)
+        texto_limpio = patron.sub('', resultado).strip()
+
+        # 2. Convertir a JSON (diccionario Python)
+        datos_json = json.loads(texto_limpio)
+        
+        return datos_json
+
+    except Exception as e:
+        print(f"Error durante el análisis con DeepSeek: {e}")
+        raise HTTPException(status_code=500, detail="Error al analizar el documento con el modelo de IA.")
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost", "http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/x-posts/{username}")
+async def get_x_posts(username: str):
+    # Simulated JSON response for X (Twitter) posts
+    mock_x_posts = [
+        {
+            "url": "https://x.com/BancoPichincha/status/1952471967098974349",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1952471967098974349",
+            "id": "1952471967098974349",
+            "text": "https://t.co/F38AzhN69M",
+            "retweetCount": 484,
+            "replyCount": 0,
+            "likeCount": 2682,
+            "quoteCount": 210,
+            "createdAt": "Mon Aug 04 20:49:26 +0000 2025",
+            "bookmarkCount": 100,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1951977538554937785",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1951977538554937785",
+            "id": "1951977538554937785",
+            "text": "https://t.co/zMvuvr0gZH",
+            "retweetCount": 216,
+            "replyCount": 0,
+            "likeCount": 1298,
+            "quoteCount": 696,
+            "createdAt": "Sun Aug 03 12:04:45 +0000 2025",
+            "bookmarkCount": 129,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1951058894689878204",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1951058894689878204",
+            "id": "1951058894689878204",
+            "text": "Entérate de lo nuevo en Banco Pichincha en 40 segundos. \nPremiamos a las empresas que impulsan los mejores proyectos sostenibles.\nTe mostramos la manera de recibir dinero desde España, gratis y en minutos.\nSomos la marca financiera más influyente del país. https://t.co/SxGyaSSp1W",
+            "retweetCount": 8,
+            "replyCount": 0,
+            "likeCount": 68,
+            "quoteCount": 12,
+            "createdAt": "Thu Jul 31 23:14:24 +0000 2025",
+            "bookmarkCount": 5,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1948790052424696118",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1948790052424696118",
+            "id": "1948790052424696118",
+            "text": "https://t.co/U0tHncuCbP",
+            "retweetCount": 36,
+            "replyCount": 0,
+            "likeCount": 206,
+            "quoteCount": 66,
+            "createdAt": "Fri Jul 25 16:58:49 +0000 2025",
+            "bookmarkCount": 7,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1947884378367135877",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1947884378367135877",
+            "id": "1947884378367135877",
+            "text": "Confianza es creer... https://t.co/XnKwrjhEJD",
+            "retweetCount": 33,
+            "replyCount": 3,
+            "likeCount": 450,
+            "quoteCount": 20,
+            "createdAt": "Wed Jul 23 05:00:00 +0000 2025",
+            "bookmarkCount": 23,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1943787516009787599",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1943787516009787599",
+            "id": "1943787516009787599",
+            "text": "El amarillo no es solo un color. Es orgullo. Es pasión. \n¡Vamos a darlo todo en la cancha! ⚽️\n#ConfianzaEsCreer en el poder del deporte femenino que inspira y empodera.  https://t.co/NHvq2qD63g",
+            "retweetCount": 2,
+            "replyCount": 0,
+            "likeCount": 10,
+            "quoteCount": 2,
+            "createdAt": "Fri Jul 11 21:40:32 +0000 2025",
+            "bookmarkCount": 0,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1939733885665132783",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1939733885665132783",
+            "id": "1939733885665132783",
+            "text": "¿Tienes 40 segundos? Entérate de #LoNuevoEnBancoPichincha \nPagar o cobrar con tu QR es ahora más fácil.\nConoce la mejor iniciativa para empezar tu carrera laboral.\n Voluntariado para apoyar a comunidad de Cayambe. https://t.co/PuxFSjsC7f",
+            "retweetCount": 3,
+            "replyCount": 0,
+            "likeCount": 14,
+            "quoteCount": 9,
+            "createdAt": "Mon Jun 30 17:12:51 +0000 2025",
+            "bookmarkCount": 3,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1935809008977559845",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1935809008977559845",
+            "id": "1935809008977559845",
+            "text": " En Ecuador, 6 de cada 10 familias de zonas rurales aún no tienen acceso a agua potable. Conseguirla implica recorrer largas distancias o pagar altos costos.\nPor eso, Banco Pichincha impulsa Sumar Juntos, iniciativa que ya ha cambiado la vida a más de 26 mil personas. ",
+            "retweetCount": 26,
+            "replyCount": 0,
+            "likeCount": 124,
+            "quoteCount": 1,
+            "createdAt": "Thu Jun 19 21:16:47 +0000 2025",
+            "bookmarkCount": 8,
+            "isRetweet": "false",
+            "isQuote": "false"
+        },
+        {
+            "url": "https://x.com/BancoPichincha/status/1934630404935524538",
+            "twitterUrl": "https://twitter.com/BancoPichincha/status/1934630404935524538",
+            "id": "1934630404935524538",
+            "text": "Hoy celebramos el esfuerzo de quienes, a pesar de la distancia, siempre están presentes. ✨\nPorque detrás de cada envío que realizan, hay más que dinero… hay medicinas, educación, sueños y, sobre todo, ese amor de familia que nunca se pierde. \n#DíaInternacionalDeLasRemesas https://t.co/TRPxs73Yvj",
+            "retweetCount": 3,
+            "replyCount": 0,
+            "likeCount": 29,
+            "quoteCount": 0,
+            "createdAt": "Mon Jun 16 15:13:26 +0000 2025",
+            "bookmarkCount": 3,
+            "isRetweet": "false",
+            "isQuote": "false"
+        }
+    ]
+    score_x = analyze_X_with_deepseek(mock_x_posts)
+    return score_x
+
+@app.get("/lnk-posts/{username}")
+async def get_lnk_posts(username: str):
+    # Simulated JSON response for X (Twitter) posts
+    mock_lnk_posts =[
+  {
+    "urn": "urn:li:fsd_company:3068933",
+    "url": "https://linkedin.com/company/banco-pichincha-ca/",
+    "name": "Banco Pichincha",
+    "avatar": "https://media.licdn.com/dms/image/v2/C4E0BAQFypsb1Ke2ARg/company-logo_200_200/company-logo_200_200/0/1631366537945/banco_pichincha_ca_logo?e=1757548800&v=beta&t=2piSs0m1GYIOh6Z1gMDvYruStUXHJ2RTpn6CL47XZQk",
+    "tagline": "En confianza",
+    "description": "En Banco Pichincha estamos conscientes que hay nuevas maneras de ver el mundo; por eso, queremos aprovechar nuestra posición de liderazgo en Ecuador, avalada por 119 años de historia, para acercar a nuestros clientes las oportunidades que brinda la nueva era en que vivimos.\n\nFormamos parte del Grupo Pichincha con presencia, también, en Perú, Colombia, España, Estados Unidos y Panamá. El grupo financiero favorece la diversidad e impulsa la inclusión en el diseño de los servicios que ofrece a sus clientes. Es flexible a los cambios que demanda un entorno más global y competitivo con el propósito de generar valor para sus públicos de interés.\n\nHemos asumido el desafío de evolucionar hacia un modelo de banca con presencia internacional, moderna y ágil, sin perder la solidez y confianza a nivel local. Cada uno de nuestros más de 10.000 colaboradores en los seis países en los que estamos presentes son fundamentales para abrirnos a los nuevos retos del mercado que exige nuevas maneras de hacer las cosas.  \n\nLa sostenibilidad y la responsabilidad social corporativa son pilares fundamentales de nuestro modelo de negocio. Este compromiso que busca propiciar un impacto positivo y justo en la sociedad nos ha valido el reconocimiento de diferentes entidades y organismos latinoamericanos y europeos.",
+    "industry": [
+      "Banking"
+    ],
+    "websiteUrl": "http://www.pichincha.com",
+    "headquarter": {
+      "description": "matriz",
+      "country": "EC",
+      "city": "Quito",
+      "postalCode": "null"
+    },
+    "hashtag": [
+      "#bancopichincha",
+      "#bancoconpropósito"
+    ],
+    "foundedOn": {
+      "month": "null",
+      "year": 1906,
+      "day": "null"
+    },
+    "crunchbaseFunding": {
+      "numberOfFundingRounds": 2,
+      "lastFundingRound": {
+        "localizedFundingType": "Debt financing",
+        "leadInvestors": [
+          {
+            "name": "CAF",
+            "crunchbaseUrl": "https://www.crunchbase.com/organization/caf?utm_source=linkedin&utm_medium=referral&utm_campaign=linkedin_companies&utm_content=investor"
+          }
+        ],
+        "amountRaised": "137000000",
+        "currencyCode": "USD",
+        "announcedOn": {
+          "month": 1,
+          "year": 2025,
+          "day": 17
+        }
+      },
+      "crunchbaseUrl": "https://www.crunchbase.com/organization/banco-pichincha?utm_source=linkedin&utm_medium=referral&utm_campaign=linkedin_companies&utm_content=profile_cta"
+    },
+    "employeeCount": 7909,
+    "followerCount": 294633
+  }
+]
+    score_lnk = analyze_LNK_with_deepseek(mock_lnk_posts)
+    return score_lnk
+
+@app.get("/fb-posts/{username}")
+async def get_fb_posts(username: str):
+
+    mock_fb_posts =[
+  {
+    "title": "Banco Pichincha | Quito",
+    "categories": [
+      "Page",
+      "Financial service"
+    ],
+    "likes": 1135817,
+    "info": [
+      "Banco Pichincha, Quito. 1,135,817 likes",
+      "30,357 talking about this",
+      "2,833 were here. 119 años cultivando confianza comprometidos con un país que crece..."
+    ],
+    "email": "facebook@pichincha.com",
+    "phone": "+593 2-299-9999",
+    "address": "Amazonas 4560 y Pereira, Quito, Ecuador https://maps.google.com/maps?q=-0.17125498%2C-78.48520535&hl=en",
+    "website": "pichincha.com",
+    "pageUrl": "https://www.facebook.com/BancoPichinchaEcuador/"
+  }
+]
+    score_fb = analyze_FB_with_deepseek(mock_fb_posts)
+    return score_fb
+
 
 @app.post("/analyze-pdf/")
 async def analyze_pdf(file: UploadFile = File(..., description="PDF a convertir")) -> Any:
@@ -406,6 +499,267 @@ async def analyze_pdf(file: UploadFile = File(..., description="PDF a convertir"
         
     except Exception as e:
         raise HTTPException(500, f'Error Interno {str(e)}')
+    
+@app.get("/social-score/v2/{username}")
+async def social_score_v2(
+    username: str,
+    w_x: float = Query(0.40, ge=0.0),
+    w_lnk: float = Query(0.35, ge=0.0),
+    w_fb: float = Query(0.25, ge=0.0),
+):
+    """
+    Metodología:
+      1) Pesos base (ajustables): X=0.40, LNK=0.35, FB=0.25
+      2) Confianza:
+         - X: min(1, n_tweets/10)
+         - LinkedIn: 0.8 + 0.2 * completitud.proporcion
+         - Facebook: 0.7 + 0.3 * completitud.proporcion
+         (si falta, 0.7)
+      3) Agregación: peso_efectivo = peso_base * confianza; renormaliza; media ponderada
+      4) Banda: Excelente / Fuerte / Moderado / Débil / Crítico
+    """
+    errors = []
+    per_platform = []
+
+    # Helper local para parsear posibles JSONResponse sin helpers externos
+    def parse_json(resp):
+        if isinstance(resp, Response):
+            try:
+                return json.loads(resp.body.decode("utf-8"))
+            except Exception:
+                return {}
+        return resp if isinstance(resp, (dict, list)) else {}
+
+    # --- X (Twitter) ---
+    try:
+        x_data = parse_json(await get_x_posts(username))
+        x_score = (
+            x_data.get("resumen_lote", {})
+                  .get("promedios", {})
+                  .get("general", None)
+        )
+        n_tweets = x_data.get("resumen_lote", {}).get("n", None)
+        if isinstance(x_score, (int, float)):
+            conf_x = min(1.0, max(0.0, float(n_tweets)/10.0)) if isinstance(n_tweets, (int, float)) else 0.7
+            per_platform.append({
+                "platform": "x",
+                "score_1_10": float(x_score),
+                "base_weight": float(w_x),
+                "confidence": float(conf_x),
+                "meta": {"n_tweets": int(n_tweets or 0)}
+            })
+        else:
+            errors.append("X: score no disponible (resumen_lote.promedios.general).")
+    except Exception as e:
+        errors.append(f"X error: {e}")
+
+    # --- LinkedIn ---
+    try:
+        lnk_data = parse_json(await get_lnk_posts(username))
+        lnk_score = lnk_data.get("relevancia_1_10", None)
+        comp_lnk = lnk_data.get("completitud", {}).get("proporcion", None)
+        if isinstance(lnk_score, (int, float)):
+            conf_lnk = (0.8 + 0.2 * float(comp_lnk)) if isinstance(comp_lnk, (int, float)) else 0.7
+            conf_lnk = max(0.0, min(1.0, conf_lnk))
+            per_platform.append({
+                "platform": "linkedin",
+                "score_1_10": float(lnk_score),
+                "base_weight": float(w_lnk),
+                "confidence": float(conf_lnk),
+                "meta": {"completitud": comp_lnk}
+            })
+        else:
+            errors.append("LinkedIn: score no disponible (relevancia_1_10).")
+    except Exception as e:
+        errors.append(f"LinkedIn error: {e}")
+
+    # --- Facebook ---
+    try:
+        fb_data = parse_json(await get_fb_posts(username))
+        best_fb_score, best_fb_comp = None, None
+        if isinstance(fb_data, list):
+            for p in fb_data:
+                if not isinstance(p, dict):
+                    continue
+                s = p.get("relevancia_1_10", None)
+                c = p.get("completitud", {}).get("proporcion", None)
+                if isinstance(s, (int, float)) and (best_fb_score is None or s > best_fb_score):
+                    best_fb_score, best_fb_comp = float(s), c
+        elif isinstance(fb_data, dict):
+            s = fb_data.get("relevancia_1_10", None)
+            c = fb_data.get("completitud", {}).get("proporcion", None)
+            if isinstance(s, (int, float)):
+                best_fb_score, best_fb_comp = float(s), c
+
+        if best_fb_score is not None:
+            conf_fb = (0.7 + 0.3 * float(best_fb_comp)) if isinstance(best_fb_comp, (int, float)) else 0.7
+            conf_fb = max(0.0, min(1.0, conf_fb))
+            per_platform.append({
+                "platform": "facebook",
+                "score_1_10": float(best_fb_score),
+                "base_weight": float(w_fb),
+                "confidence": float(conf_fb),
+                "meta": {"completitud": best_fb_comp}
+            })
+        else:
+            errors.append("Facebook: score no disponible (relevancia_1_10).")
+    except Exception as e:
+        errors.append(f"Facebook error: {e}")
+
+    if not per_platform:
+        raise HTTPException(status_code=500, detail={"message": "No hay datos para calcular el score.", "errors": errors})
+
+    # --- Agregación con renormalización de pesos efectivos ---
+    eff_weights = [p["base_weight"] * p["confidence"] for p in per_platform]
+    total_eff = sum(eff_weights)
+    if total_eff <= 0:
+        total_eff = float(len(per_platform))
+        eff_weights = [1.0] * len(per_platform)
+
+    for p, ew in zip(per_platform, eff_weights):
+        p["effective_weight_share"] = float(ew / total_eff)
+
+    final_score = sum(p["score_1_10"] * p["effective_weight_share"] for p in per_platform)
+
+    # Banda simple
+    if final_score >= 9: band = "Excelente"
+    elif final_score >= 7: band = "Fuerte"
+    elif final_score >= 5: band = "Moderado"
+    elif final_score >= 3: band = "Débil"
+    else: band = "Crítico"
+
+    return {
+        "version": "2.0",
+        "username": username,
+        "methodology": {
+            "weights_base": {"x": w_x, "linkedin": w_lnk, "facebook": w_fb},
+            "confidence_rules": {
+                "x": "min(1, n_tweets/10)",
+                "linkedin": "0.8 + 0.2 * completitud.proporcion",
+                "facebook": "0.7 + 0.3 * completitud.proporcion",
+                "default_if_missing": 0.7
+            },
+            "aggregation": "peso_efectivo = peso_base * confianza; renormalización; media ponderada"
+        },
+        "per_platform": per_platform,
+        "final_score_1_10": round(float(final_score), 2),
+        "band": band,
+        "errors": errors or None
+    }
+
+def _band(x: float) -> str:
+    return "Excelente" if x >= 9 else "Fuerte" if x >= 7 else "Moderado" if x >= 5 else "Débil" if x >= 3 else "Crítico"
+
+@app.post("/credit-score/v1")
+async def credit_score_v1(
+    payload: dict = Body(..., description="{'username': str, 'financial_scoring': {...} | optional, 'score_fin': float | optional, 'w_fin': float=0.7, 'w_soc': float=0.3}")
+):
+    print(f"Payload recibido: {payload}")
+    username = payload.get("username")
+    if not username:
+        raise HTTPException(400, "Falta 'username'")
+
+    # Pesos (usuario decide)
+    w_fin = float(payload.get("w_fin", 0.7))
+    w_soc = float(payload.get("w_soc", 0.3))
+    if (w_fin + w_soc) <= 0:
+        raise HTTPException(400, "w_fin y w_soc no pueden ser ambos cero.")
+
+    # ------- Financiero (ya calculado) -------
+    fin_scoring = payload.get("financial_scoring") or {}
+    score_fin = payload.get("score_fin")
+
+    # score_fin: usa el que te pasan; si no, intenta extraer del JSON; si no, suma parciales
+    if not isinstance(score_fin, (int, float)):
+        score_fin = (
+            fin_scoring.get("conclusion_final", {}).get("puntuacion_total", None)
+            if isinstance(fin_scoring, dict) else None
+        )
+    if not isinstance(score_fin, (int, float)):
+        indicadores = (fin_scoring.get("indicadores") or []) if isinstance(fin_scoring, dict) else []
+        score_fin = sum(float(i.get("puntuacion", 0) or 0) for i in indicadores) if indicadores else 0.0
+
+    score_fin = max(0.0, min(10.0, float(score_fin)))
+    
+    # completitud -> confianza financiera (sin fechas)
+    indicadores = (fin_scoring.get("indicadores") or []) if isinstance(fin_scoring, dict) else []
+    vals = [i.get("puntuacion") for i in indicadores if isinstance(i.get("puntuacion"), (int, float))]
+    completeness = min(1.0, (len(vals) / 5.0)) if indicadores else 0.6
+    conf_fin = max(0.3, min(1.0, 0.6 + 0.4 * completeness))
+    band_fin = _band(score_fin)
+    
+    # ------- Social (reusa tu endpoint v2) -------
+    w_x  = float(payload.get("w_x", 0.40))
+    w_lnk = float(payload.get("w_lnk", 0.35))
+    w_fb  = float(payload.get("w_fb", 0.25))
+
+    soc = await social_score_v2(username=username, w_x=w_x, w_lnk=w_lnk, w_fb=w_fb)
+    score_soc = float(soc.get("final_score_1_10", 0.0))
+    per_platform = soc.get("per_platform", []) or []
+    conf_soc = sum(
+        float(p.get("confidence", 0)) * float(p.get("effective_weight_share", 0))
+        for p in per_platform
+    ) if per_platform else 0.7
+    conf_soc = max(0.0, min(1.0, conf_soc))
+    band_soc = soc.get("band", "N/A")
+    
+    
+    # ------- Agregación simple -------
+    eff_fin = w_fin * conf_fin
+    eff_soc = w_soc * conf_soc
+    total = (eff_fin + eff_soc) or 1.0
+    share_fin = eff_fin / total
+    share_soc = eff_soc / total
+
+    final_score = round(score_fin * share_fin + score_soc * share_soc, 2)
+    band_final = _band(final_score)
+    
+    # ------- Reglas -------
+    if score_fin < 4.0:
+        decision, limit_usd = "Rechazado", 0
+    elif final_score >= 8.5 and score_fin >= 7.0:
+        decision, limit_usd = "Aprobado", 5000
+    elif final_score >= 7.0:
+        decision, limit_usd = "Aprobado", 3500
+    elif final_score >= 5.5:
+        decision, limit_usd = "Aprobado con condiciones", 2000
+    elif final_score >= 4.0:
+        decision, limit_usd = "Revisión manual", 1000
+    else:
+        decision, limit_usd = "Rechazado", 0
+
+    conditions = []
+    if decision in ("Aprobado con condiciones", "Revisión manual"):
+        conditions = ["Domiciliación de pagos", "Garante/colateral ligero"]
+
+    result = {
+        "version": "1.1",
+        "weights_input": {"financial": round(w_fin, 2), "social": round(w_soc, 2)},
+        "confidences": {"financial": round(conf_fin, 2), "social": round(conf_soc, 2)},
+        "components": {
+            "financial": {
+                "score_1_10": round(score_fin, 2),
+                "band": band_fin,
+                "completeness": round(completeness, 2)
+            },
+            "social": {
+                "score_1_10": round(score_soc, 2),
+                "band": band_soc,
+                "per_platform": per_platform
+            }
+        },
+        "shares": {"financial": round(share_fin, 2), "social": round(share_soc, 2)},
+        "final_score_1_10": final_score,
+        "band": band_final,
+        "decision": decision,
+        "credit_limit_recommended_usd": limit_usd,
+        "conditions": conditions
+    }
+    
+    print(f"Resultado final: {result}")
+
+    return result
+
 
 @app.get("/")
 def read_root():

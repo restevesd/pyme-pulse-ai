@@ -8,18 +8,14 @@ import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { FirecrawlService } from "@/utils/FirecrawlService";
+import { marked } from "marked"; // Import marked
+import { Loader2 } from "lucide-react";
 
 // --- TYPE DEFINITIONS ---
 
 interface FormData {
   nombre: string;
   ruc: string;
-  // ventasMensuales: number; // USD
-  // margen: number; // 0-100
-  // flujoCaja: number; // USD
-  // antiguedad: number; // años
-  promedioResenas: number; // 1-5
-  referenciasPositivas: number; // 0-10
   // cumplimientoPagos: number; // 0-100
   xUrl: string;
   linkedinUrl: string;
@@ -67,24 +63,18 @@ interface PatrimonioNetoData {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-function computeScore(data: FormData, socialSignal: number) {
-  // Scoring simplified after removing fields
-  const resenasScore = clamp(data.promedioResenas / 4.5, 0, 1); // 4.5 = 1
-  const refsScore = clamp(data.referenciasPositivas / 8, 0, 1); // 8 = 1
+function computeScore(socialSignal: number) {
   const socialScore = clamp(socialSignal, 0, 1);
 
-  // Re-weighted (example)
-  const score = resenasScore * 0.5 + refsScore * 0.3 + socialScore * 0.2;
+  // Score now only depends on socialSignal
+  const score = socialScore; // Assuming socialSignal is already a score between 0 and 1
 
-  const score100 = Math.round(score * 100);
+  const score10 = parseFloat((score * 10).toFixed(1));
   let riesgo: 'bajo' | 'medio' | 'alto' = 'medio';
-  if (score100 >= 70) riesgo = 'bajo';
-  else if (score100 < 50) riesgo = 'alto';
+  if (score10 >= 7) riesgo = 'bajo';
+  else if (score10 < 5) riesgo = 'alto';
 
-  // Placeholder for credit recommendation as it depended on removed fields
-  const creditoRecomendado = 0;
-
-  return { score100, riesgo, creditoRecomendado };
+  return { score10, riesgo };
 }
 
 export default function Evaluar() {
@@ -99,8 +89,6 @@ export default function Evaluar() {
   const [data, setData] = useState<FormData>({
     nombre: "",
     ruc: "",
-    promedioResenas: 3.5,
-    referenciasPositivas: 0,
     xUrl: "",
     linkedinUrl: "",
     facebookUrl: "",
@@ -222,7 +210,16 @@ export default function Evaluar() {
     setTotalPasivoPatrimonio(totalPasivo + patrimonioNeto.total_patrimonio_neto);
   }, [totalPasivo, patrimonioNeto.total_patrimonio_neto]);
 
-  const result = useMemo(() => computeScore(data, socialSignal), [data, socialSignal]);
+  const result = useMemo(() => computeScore(socialSignal), [socialSignal]);
+
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [financialReportMarkdown, setFinancialReportMarkdown] = useState<string>("");
+  const [socialScoreResult, setSocialScoreResult] = useState<any>(null);
+  const [financialScore, setFinancialScore] = useState<number | null>(null);
+    const [financialScoringResult, setFinancialScoringResult] = useState<any>(null);
+  const [finalCreditScore, setFinalCreditScore] = useState<number>(0);
+  const [finalCreditBand, setFinalCreditBand] = useState<string | null>(null);
+  const [finalCreditDecision, setFinalCreditDecision] = useState<string | null>(null);
 
   const handleFile = async (file?: File) => {
     if (!file) return;
@@ -230,13 +227,23 @@ export default function Evaluar() {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       toast({ title: "Formato de archivo no válido", description: "Solo se aceptan archivos PDF.", variant: "destructive" });
       setUploadedName("");
+      setUploadedFile(null);
+      return;
+    }
+    setUploadedFile(file);
+    toast({ title: "PDF cargado", description: "Haz clic en 'Analizar información financiera' para procesar.", variant: "default" });
+  };
+
+  const analyzeFinancialInfo = async () => {
+    if (!uploadedFile) {
+      toast({ title: "No hay archivo", description: "Por favor, sube un archivo PDF primero.", variant: "destructive" });
       return;
     }
 
     setIsEvaluating(true);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadedFile);
 
       const response = await fetch("http://localhost:8000/analyze-pdf/", {
         method: "POST",
@@ -251,12 +258,6 @@ export default function Evaluar() {
       const result = await response.json();
       console.log("PDF Analysis Result:", result);
 
-      // Assuming the backend returns the data in a structure that can directly update your state
-      // You'll need to map the backend response to your frontend state variables (activoCorriente, etc.)
-      // For now, let's just show a success toast.
-      toast({ title: "PDF analizado", description: "El estado financiero ha sido analizado exitosamente.", variant: "default" });
-
-      // Example of how you might update state with backend data (adjust according to actual backend response)
       if (result.datos_json) {
         const {
             empresa,
@@ -332,6 +333,15 @@ export default function Evaluar() {
         setTotalPasivo(total_pasivo || 0);
         setTotalPasivoPatrimonio(total_pasivo_patrimonio || 0);
 
+        setFinancialReportMarkdown(result.markdown_report || ""); // Store the markdown report
+
+        if (result.scoring) {
+          setFinancialScoringResult(result.scoring);
+          if (result.scoring.conclusion_final) {
+            setFinancialScore(result.scoring.conclusion_final.puntuacion_total);
+          }
+        }
+
         toast({ title: "Datos financieros cargados", description: "Los campos del balance han sido actualizados.", variant: "default" });
       }
 
@@ -339,41 +349,9 @@ export default function Evaluar() {
       console.error(e);
       toast({ title: "Error al analizar el PDF", description: e.message || "Hubo un problema al procesar el archivo.", variant: "destructive" });
       setUploadedName("");
-    } finally {
-      setIsEvaluating(false);
-    }
-  };
-
-  const handleCrawl = async () => {
-    const urls = [data.xUrl, data.linkedinUrl, data.facebookUrl, data.redSocialUrl].filter(u => !!u && u.trim().length > 0);
-    if (!urls.length) {
-      toast({ title: "URL requerida", description: "Agrega X o LinkedIn para analizar" });
-      return;
-    }
-    setIsEvaluating(true);
-    try {
-      // Firecrawl logic remains the same
-      const settled = await Promise.allSettled(urls.map(u => FirecrawlService.crawlWebsite(u)));
-      const successes = settled.filter(
-        (s): s is PromiseFulfilledResult<{ success: boolean; data?: any }> =>
-          s.status === 'fulfilled' && (s as PromiseFulfilledResult<{ success: boolean; data?: any }>).value?.success
-      );
-      if (!successes.length) {
-        toast({ title: "No se pudo analizar", description: "No se obtuvo contenido de las redes", variant: "destructive" });
-        setSocialSignal(0);
-        return;
-      }
-      const combinedText = successes.map(s => JSON.stringify(s.value.data)).join(" ");
-      const positives = (combinedText.match(/excelente|bueno|recomendado|me\s+gusta|⭐|★/gi) || []).length;
-      const negatives = (combinedText.match(/malo|queja|reclamo|fraude|estafa|no\s+recomiendo/gi) || []).length;
-      const activity = Math.min(combinedText.length / 7000, 1);
-      const raw = (positives - negatives) / 20 + activity;
-      const normalized = clamp((raw + 1) / 3, 0, 1);
-      setSocialSignal(normalized);
-      toast({ title: "Actividad digital analizada", description: `Señal: ${(normalized * 100).toFixed(0)}%` });
-    } catch (e) {
-      console.error(e);
-      toast({ title: "Error", description: "No se pudo completar el análisis", variant: "destructive" });
+      setFinancialReportMarkdown(""); // Clear markdown on error
+      setFinancialScore(null);
+      setFinancialScoringResult(null);
     } finally {
       setIsEvaluating(false);
     }
@@ -386,11 +364,41 @@ export default function Evaluar() {
   const analyzeScoring = async () => {
     setIsEvaluating(true);
     try {
-      if (analyzeDigitalActivity) {
-        await handleCrawl();
+      if (!data.nombre || !data.ruc) {
+        toast({ title: "Información financiera incompleta", description: "Por favor, sube y analiza el estado financiero primero.", variant: "destructive" });
+        setIsEvaluating(false);
+        return;
       }
-      const currentResult = computeScore(data, socialSignal);
-      toast({ title: "Scoring Analizado", description: `Puntaje: ${currentResult.score100}/100, Riesgo: ${currentResult.riesgo.toUpperCase()}` });
+
+      if (analyzeDigitalActivity) {
+        const hasSocialUrl = data.xUrl || data.linkedinUrl || data.facebookUrl || data.redSocialUrl;
+        if (!hasSocialUrl) {
+          toast({ title: "URLs de Redes Sociales requeridas", description: "Por favor, ingresa al menos una URL de X, LinkedIn o Facebook para analizar la actividad digital.", variant: "destructive" });
+          setIsEvaluating(false);
+          return;
+        }
+        // Call backend social score API
+        try {
+          const socialResponse = await fetch(`http://localhost:8000/social-score/v2/${data.nombre || "masapp"}`); // Use company name or default
+          if (!socialResponse.ok) {
+            const errorData = await socialResponse.json();
+            throw new Error(errorData.detail || "Error al obtener el score social.");
+          }
+          const socialData = await socialResponse.json();
+          setSocialScoreResult(socialData);
+          setSocialSignal(socialData.final_score_1_10 / 10); // Normalize to 0-1
+          toast({ title: "Actividad digital analizada", description: `Señal: ${Math.round(socialData.final_score_1_10 * 10)}%` });
+        } catch (socialError: any) {
+          console.error("Error fetching social score:", socialError);
+          toast({ title: "Error", description: socialError.message || "No se pudo completar el análisis de redes sociales.", variant: "destructive" });
+          setSocialSignal(0);
+          setSocialScoreResult(null);
+          setIsEvaluating(false);
+          return;
+        }
+      }
+      const currentResult = computeScore(socialSignal);
+      toast({ title: "Scoring Analizado", description: `Puntaje: ${currentResult.score10}/10, Riesgo: ${currentResult.riesgo.toUpperCase()}` });
     } catch (error) {
       console.error("Error analyzing scoring:", error);
       toast({ title: "Error al analizar scoring", description: "Hubo un problema al calcular el scoring.", variant: "destructive" });
@@ -399,6 +407,215 @@ export default function Evaluar() {
     }
   };
 
+  const calculateCreditScore = async () => {
+    setIsEvaluating(true);
+    try {
+      if (financialScore === null || !socialScoreResult) {
+        toast({ title: "Información incompleta", description: "Por favor, analiza la información financiera y social primero.", variant: "destructive" });
+        setIsEvaluating(false);
+        return;
+      }
+
+      const xScore = socialScoreResult.per_platform?.find((p: any) => p.platform === 'x')?.score_1_10 || 0;
+      const linkedinScore = socialScoreResult.per_platform?.find((p: any) => p.platform === 'linkedin')?.score_1_10 || 0;
+      const facebookScore = socialScoreResult.per_platform?.find((p: any) => p.platform === 'facebook')?.score_1_10 || 0;
+
+      const payload = {
+        username: data.nombre || "mi_cliente", // Use data.nombre or a default
+        financial_scoring: {
+          conclusion_final: { puntuacion_total: financialScore },
+          indicadores: [
+            { puntuacion: xScore },
+            { puntuacion: linkedinScore },
+            { puntuacion: facebookScore }
+          ]
+        },
+        w_fin: 0.6,
+        w_soc: 0.4
+      };
+
+      console.log("Payload for credit-score/v1:", payload);
+
+      const response = await fetch("http://localhost:8000/credit-score/v1", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Error al calcular el score de crédito.");
+      }
+
+      const result = await response.json();
+      console.log("Credit Score Result:", result);
+      setFinalCreditScore(result.final_score_1_10);
+      setFinalCreditBand(result.band);
+      setFinalCreditDecision(result.decision);
+      toast({ title: "Scoring de Crédito Calculado", description: `Puntaje Final: ${result.final_score_1_10}/10`, variant: "default" });
+
+    } catch (error: any) {
+      console.error("Error calculating credit score:", error);
+      toast({ title: "Error al calcular score de crédito", description: error.message || "Hubo un problema al calcular el score de crédito.", variant: "destructive" });
+      setFinalCreditScore(0); // Reset on error
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleViewSocialReport = () => {
+    if (!socialScoreResult) {
+      toast({ title: "No hay datos de scoring social", description: "Por favor, analiza la actividad digital primero.", variant: "destructive" });
+      return;
+    }
+
+    const newWindow = window.open();
+    if (newWindow) {
+      const {
+        username,
+        methodology,
+        per_platform,
+        final_score_1_10,
+        band,
+        errors
+      } = socialScoreResult;
+
+      // Helper to render platform details
+      const renderPlatformDetails = (platform) => {
+        if (!platform) return '<li>Datos no disponibles</li>';
+        return `
+          <li><strong>Puntaje:</strong> ${platform.score_1_10}/10</li>
+          <li><strong>Peso Base:</strong> ${platform.base_weight * 100}%</li>
+          <li><strong>Confianza:</strong> ${Math.round(platform.confidence * 100)}%</li>
+          <li><strong>Participación Efectiva:</strong> ${Math.round(platform.effective_weight_share * 100)}%</li>
+        `;
+      };
+
+      const x_details = per_platform.find(p => p.platform === 'x');
+      const linkedin_details = per_platform.find(p => p.platform === 'linkedin');
+      const facebook_details = per_platform.find(p => p.platform === 'facebook');
+
+      const reportHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Informe de Scoring Social para ${username}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f9fafb; color: #111827; }
+            .container { max-width: 800px; margin: 2rem auto; padding: 2rem; background-color: #ffffff; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+            h1, h2, h3 { color: #111827; }
+            h1 { font-size: 2.25rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem; }
+            h2 { font-size: 1.5rem; margin-top: 2rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+            h3 { font-size: 1.25rem; margin-top: 1.5rem; }
+            p, li { font-size: 1rem; line-height: 1.6; color: #374151; }
+            ul { list-style-type: none; padding-left: 0; }
+            strong { color: #111827; }
+            .card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; }
+            .score-summary { text-align: center; padding: 2rem; background-color: #1f2937; color: #ffffff; border-radius: 0.5rem; margin-bottom: 2rem; }
+            .score-summary .score { font-size: 4rem; font-weight: bold; }
+            .score-summary .band { font-size: 1.5rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8; }
+            .methodology { font-size: 0.875rem; color: #6b7280; }
+            .methodology-box { background-color: #f3f4f6; border-left: 4px solid #9ca3af; padding: 1rem; margin-top: 1rem; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Informe de Scoring Social</h1>
+            <p><strong>Empresa:</strong> ${username}</p>
+
+            <div class="score-summary">
+              <div class="score">${final_score_1_10} / 10</div>
+              <div class="band">${band}</div>
+            </div>
+
+            <h2>Resultados por Plataforma</h2>
+            
+            <div class="card">
+              <h3>X (Twitter)</h3>
+              <ul>${renderPlatformDetails(x_details)}</ul>
+            </div>
+
+            <div class="card">
+              <h3>LinkedIn</h3>
+              <ul>${renderPlatformDetails(linkedin_details)}</ul>
+            </div>
+
+            <div class="card">
+              <h3>Facebook</h3>
+              <ul>${renderPlatformDetails(facebook_details)}</ul>
+            </div>
+
+            ${errors && errors.length > 0 ? `<h2>Errores Detectados</h2><div class="card"><p>${errors.join('<br>')}</p></div>` : ''}
+
+
+            <h2>Metodología de Cálculo</h2>
+            <div class="methodology-box">
+              <p class="methodology">
+                El puntaje final es una media ponderada de los puntajes individuales de cada plataforma. La "confianza" en el puntaje de cada plataforma ajusta su peso en el cálculo final.
+              </p>
+              <h3 class="methodology">X (Twitter)</h3>
+              <p class="methodology">
+                Se analiza la actividad (likes, retweets, etc., con decaimiento en el tiempo) y el sentimiento (positivo, negativo, neutral) de las publicaciones para generar un puntaje.
+              </p>
+              <h3 class="methodology">LinkedIn y Facebook</h3>
+              <p class="methodology">
+                Se calcula una puntuación de "relevancia" basada en el número de seguidores/likes, empleados (en LinkedIn), y qué tan completo está el perfil de la empresa (información de contacto, sitio web, etc.).
+              </p>
+            </div>
+
+          </div>
+        </body>
+        </html>
+      `;
+      newWindow.document.write(reportHTML);
+      newWindow.document.close();
+    } else {
+      toast({ title: "Error", description: "No se pudo abrir una nueva ventana. Por favor, permite pop-ups.", variant: "destructive" });
+    }
+  };
+
+  const handleViewFinancialReport = () => {
+    if (financialReportMarkdown) {
+      const newWindow = window.open();
+      if (newWindow) {
+        newWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Informe Financiero</title>
+            <style>
+              body { font-family: sans-serif; margin: 20px; line-height: 1.6; }
+              h1, h2, h3, h4, h5, h6 { margin-top: 1em; margin-bottom: 0.5em; font-weight: bold; }
+              h1 { font-size: 2em; }
+              h2 { font-size: 1.5em; }
+              h3 { font-size: 1.2em; }
+              p { margin-bottom: 1em; }
+              ul, ol { margin-bottom: 1em; padding-left: 20px; }
+              li { margin-bottom: 0.5em; }
+              strong { font-weight: bold; }
+              em { font-style: italic; }
+              pre { background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+              code { font-family: monospace; background-color: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+              blockquote { border-left: 4px solid #ccc; padding-left: 10px; color: #666; margin-left: 0; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+            </style>
+          </head>
+          <body>
+            <h1>Informe Financiero</h1>
+            <div>${marked.parse(financialReportMarkdown)}</div>
+          </body>
+          </html>
+        `);
+        newWindow.document.close();
+      } else {
+        toast({ title: "Error", description: "No se pudo abrir una nueva ventana. Por favor, permite pop-ups.", variant: "destructive" });
+      }
+    }
+  };
   return (
     <main className="min-h-screen pb-16">
       <section className="container mx-auto grid gap-6 lg:grid-cols-2 pt-10">
@@ -414,6 +631,18 @@ export default function Evaluar() {
                 <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
                 <Button variant="premium" onClick={() => fileRef.current?.click()}>Subir Estado Financiero</Button>
                 {uploadedName && <p className="text-sm text-muted-foreground">Adjunto: {uploadedName}</p>}
+              </div>
+              <div className="pt-2 flex gap-2">
+                <Button variant="default" onClick={analyzeFinancialInfo} disabled={!uploadedFile || isEvaluating}>
+                  {isEvaluating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analizando...
+                    </>
+                  ) : (
+                    "Analizar información financiera"
+                  )}
+                </Button>
               </div>
             </div>
 
@@ -580,20 +809,6 @@ export default function Evaluar() {
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-sm font-medium">Reseñas y Referencias</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="resenas">Promedio Reseñas (1-5)</Label>
-                  <Input id="resenas" type="number" min={1} max={5} step={0.1} value={data.promedioResenas} onChange={e => setData({ ...data, promedioResenas: Number(e.target.value) })} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="refs">Referencias Positivas (0-10)</Label>
-                  <Input id="refs" type="number" min={0} max={10} value={data.referenciasPositivas} onChange={e => setData({ ...data, referenciasPositivas: Number(e.target.value) })} />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
               <h4 className="text-sm font-medium">Redes Sociales</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -614,7 +829,16 @@ export default function Evaluar() {
                 <Label htmlFor="analyzeDigitalActivity">Analizar Actividad Digital</Label>
               </div>
               <div className="pt-2">
-                <Button variant="default" className="bg-green-500 hover:bg-green-600" onClick={analyzeScoring} disabled={isEvaluating}>Analizar Scoring</Button>
+                <Button variant="default" onClick={analyzeScoring} disabled={isEvaluating}>
+                  {isEvaluating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analizando...
+                    </>
+                  ) : (
+                    "Analizar Scoring social"
+                  )}
+                </Button>
               </div>
             </div>
 
@@ -631,38 +855,61 @@ export default function Evaluar() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm">Puntaje</span>
-                  <span className="text-sm font-medium">{result.score100}/100</span>
+                  <span className="text-sm font-medium">{finalCreditScore}/10</span>
                 </div>
-                <Progress value={result.score100} />
-                <p className="mt-2 text-sm">Riesgo: <span className={result.riesgo === 'bajo' ? 'text-green-500' : result.riesgo === 'medio' ? 'text-yellow-500' : 'text-red-500'}>{result.riesgo.toUpperCase()}</span></p>
+                <Progress value={result.score10 * 10} />
+                <p className="mt-2 text-sm">Riesgo: <span className={finalCreditBand === 'Excelente' ? 'text-green-500' : finalCreditBand === 'Fuerte' ? 'text-green-500' : finalCreditBand === 'Moderado' ? 'text-yellow-500' : finalCreditBand === 'Débil' ? 'text-red-500' : finalCreditBand === 'Crítico' ? 'text-red-500' : ''}>{finalCreditDecision ? finalCreditDecision.toUpperCase() : ''}</span></p>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-lg border">
-                  <p className="text-sm text-muted-foreground">Crédito Recomendado</p>
-                  <p className="text-2xl font-semibold">$ {result.creditoRecomendado.toLocaleString('en-US')}</p>
+                <div className="p-4 rounded-lg border flex flex-col items-center">
+                  <p className="text-sm text-muted-foreground">Scoring Financiero</p>
+                  <p className="text-2xl font-semibold">
+                    {financialScore !== null ? `${financialScore}/10` : "esperando información"}
+                  </p>
+                  <div className="pt-2">
+                    <Button variant="outline" size="sm" onClick={handleViewFinancialReport} disabled={!financialScoringResult || isEvaluating}>
+                      Ver Informe
+                    </Button>
+                  </div>
                 </div>
-                <div className="p-4 rounded-lg border">
-                  <p className="text-sm text-muted-foreground">Señal Digital</p>
-                  <p className="text-2xl font-semibold">{Math.round(socialSignal * 100)}%</p>
+                <div className="p-4 rounded-lg border flex flex-col items-center">
+                  <p className="text-sm text-muted-foreground">Scoring Social</p>
+                  <p className="text-2xl font-semibold">
+                    {socialScoreResult ? `${socialScoreResult.final_score_1_10}/10` : "esperando información"}
+                  </p>
+                  <div className="pt-2">
+                    <Button variant="outline" size="sm" onClick={handleViewSocialReport} disabled={!socialScoreResult || isEvaluating}>
+                      Ver Informe
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <h4 className="text-sm font-medium mb-3">Principales Factores</h4>
-                <ul className="text-sm grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <li>Reseñas: {data.promedioResenas.toFixed(1)}</li>
-                  <li>Referencias: {data.referenciasPositivas}</li>
-                  <li>Actividad Digital: {Math.round(socialSignal * 100)}%</li>
-                </ul>
+              <div className="pt-4 text-center"> {/* Centered div for the button */}
+                <Button variant="default" onClick={calculateCreditScore} disabled={isEvaluating}>
+                  {isEvaluating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Calculando Score de Crédito...
+                    </>
+                  ) : (
+                    "Calcular Score de Crédito Final"
+                  )}
+                </Button>
               </div>
 
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium">Simulador de Escenarios</h4>
-                <div>
-                  <Label>Ajustar Reputación (1-5)</Label>
-                  <Slider defaultValue={[data.promedioResenas]} min={1} max={5} step={0.1} onValueChange={([v]) => setData(d => ({ ...d, promedioResenas: v }))} />
-                </div>
+              <div className="p-4 rounded-lg border flex flex-col items-center w-full mx-auto"> {/* Added w-full and mx-auto for centering */}
+                <p className="text-sm text-muted-foreground">Score de Crédito Final</p>
+                <p className="text-2xl font-semibold">
+                  {finalCreditScore !== null ? `${finalCreditScore}/10` : "0/10"}
+                </p>
               </div>
+
+              
+
+              
+
+              
             </div>
           </CardContent>
         </Card>
