@@ -436,7 +436,7 @@ export default function Evaluar() {
 
       console.log("Payload for credit-score/v1:", payload);
 
-      const response = await fetch("http://socialcredit.masappec.com/api/analyze-pdf/credit-score/v1", {
+      const response = await fetch("http://socialcredit.masappec.com/api/credit-score/v1", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
