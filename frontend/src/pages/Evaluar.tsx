@@ -245,7 +245,7 @@ export default function Evaluar() {
       const formData = new FormData();
       formData.append("file", uploadedFile);
 
-      const response = await fetch("http://localhost:8000/analyze-pdf/", {
+      const response = await fetch("http://socialcredit.masappec.com/api/analyze-pdf/", {
         method: "POST",
         body: formData,
       });
@@ -379,7 +379,7 @@ export default function Evaluar() {
         }
         // Call backend social score API
         try {
-          const socialResponse = await fetch(`http://localhost:8000/social-score/v2/${data.nombre || "masapp"}`); // Use company name or default
+          const socialResponse = await fetch(`http://socialcredit.masappec.com/api/social-score/v2/${data.nombre || "masapp"}`); // Use company name or default
           if (!socialResponse.ok) {
             const errorData = await socialResponse.json();
             throw new Error(errorData.detail || "Error al obtener el score social.");
@@ -436,7 +436,7 @@ export default function Evaluar() {
 
       console.log("Payload for credit-score/v1:", payload);
 
-      const response = await fetch("http://localhost:8000/credit-score/v1", {
+      const response = await fetch("http://socialcredit.masappec.com/api/analyze-pdf/credit-score/v1", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
