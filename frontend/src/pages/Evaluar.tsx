@@ -220,6 +220,7 @@ export default function Evaluar() {
   const [finalCreditScore, setFinalCreditScore] = useState<number>(0);
   const [finalCreditBand, setFinalCreditBand] = useState<string | null>(null);
   const [finalCreditDecision, setFinalCreditDecision] = useState<string | null>(null);
+  const [creditScoreResult, setCreditScoreResult] = useState<any>(null);
 
   const handleFile = async (file?: File) => {
     if (!file) return;
@@ -454,6 +455,7 @@ export default function Evaluar() {
       setFinalCreditScore(result.final_score_1_10);
       setFinalCreditBand(result.band);
       setFinalCreditDecision(result.decision);
+      setCreditScoreResult(result);
       toast({ title: "Scoring de Crédito Calculado", description: `Puntaje Final: ${result.final_score_1_10}/10`, variant: "default" });
 
     } catch (error: any) {
@@ -616,6 +618,160 @@ export default function Evaluar() {
       }
     }
   };
+
+  const handleViewCreditReport = () => {
+    if (!creditScoreResult) {
+      toast({ title: "No hay datos de scoring de crédito", description: "Por favor, calcula el score de crédito final primero.", variant: "destructive" });
+      return;
+    }
+
+    const {
+      version,
+      weights_input,
+      confidences,
+      components,
+      shares,
+      final_score_1_10,
+      band,
+      decision,
+      credit_limit_recommended_usd,
+      conditions
+    } = creditScoreResult;
+
+    const financialComponent = components.financial;
+    const socialComponent = components.social;
+
+    const generateHtmlReport = () => {
+      let htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Informe de Score de Crédito Final</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f9fafb; color: #111827; line-height: 1.6; }
+            .container { max-width: 900px; margin: 2rem auto; padding: 2rem; background-color: #ffffff; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+            h1, h2, h3, h4 { color: #111827; margin-top: 1.5rem; margin-bottom: 0.8rem; }
+            h1 { font-size: 2.5rem; text-align: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 1rem; }
+            h2 { font-size: 1.8rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
+            h3 { font-size: 1.4rem; }
+            h4 { font-size: 1.2rem; }
+            p, ul, ol { font-size: 1rem; margin-bottom: 1rem; }
+            ul { list-style-type: disc; padding-left: 20px; }
+            ol { list-style-type: decimal; padding-left: 20px; }
+            strong { font-weight: bold; }
+            .score-summary { text-align: center; padding: 2rem; background-color: #1f2937; color: #ffffff; border-radius: 0.5rem; margin-bottom: 2rem; }
+            .score-summary .score { font-size: 4.5rem; font-weight: bold; line-height: 1; }
+            .score-summary .band { font-size: 1.8rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.9; margin-top: 0.5rem; }
+            .section-card { background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1.5rem; }
+            .explanation { font-style: italic; color: #6b7280; margin-top: 0.5rem; }
+            .highlight { background-color: #d1fae5; padding: 0.2em 0.4em; border-radius: 0.3em; }
+            .warning { background-color: #fee2e2; padding: 0.2em 0.4em; border-radius: 0.3em; }
+            .good { color: #10b981; font-weight: bold; }
+            .neutral { color: #f59e0b; font-weight: bold; }
+            .bad { color: #ef4444; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Informe de Score de Crédito Final</h1>
+            <p class="explanation" style="text-align: center;">Este informe presenta un análisis consolidado de la salud financiera y la presencia digital de la empresa, para determinar su elegibilidad crediticia.</p>
+
+            <div class="score-summary">
+              <div class="score">${final_score_1_10}/10</div>
+              <div class="band">${band.toUpperCase()}</div>
+              <p style="margin-top: 1rem; font-size: 1.2rem;">Decisión de Crédito: <strong>${decision}</strong></p>
+              <p style="font-size: 1.2rem;">Límite de Crédito Recomendado: <strong>${credit_limit_recommended_usd.toLocaleString('es-ES')} USD</strong></p>
+              ${conditions && conditions.length > 0 ? `
+                <p style="font-size: 1rem; margin-top: 1rem;">Condiciones Adicionales:</p>
+                <ul style="list-style-type: none; padding: 0; margin: 0;">
+                  ${conditions.map(cond => `<li style="font-size: 0.9rem;">- ${cond}</li>`).join('')}
+                </ul>
+              ` : ''}
+            </div>
+
+            <h2>Detalle del Análisis</h2>
+
+            <div class="section-card">
+              <h3>1. Ponderación de Componentes</h3>
+              <p>Este apartado muestra cómo se combinan los diferentes factores para llegar al score final.</p>
+              <ul>
+                <li><strong>Peso del Componente Financiero:</strong> ${Math.round(weights_input.financial * 100)}%
+                  <span class="explanation"> (Importancia asignada a los datos financieros tradicionales)</span></li>
+                <li><strong>Peso del Componente Social:</strong> ${Math.round(weights_input.social * 100)}%
+                  <span class="explanation"> (Importancia asignada a la actividad y reputación en redes sociales)</span></li>
+              </ul>
+              <h4>Confianza en los Datos</h4>
+              <p>Indica la fiabilidad de la información utilizada en cada componente.</p>
+              <ul>
+                <li><strong>Confianza Financiera:</strong> ${Math.round(confidences.financial * 100)}%
+                  <span class="explanation"> (Basado en la completitud y calidad de los datos del estado financiero)</span></li>
+                <li><strong>Confianza Social:</strong> ${Math.round(confidences.social * 100)}%
+                  <span class="explanation"> (Basado en la cantidad y consistencia de la información de redes sociales)</span></li>
+              </ul>
+              <h4>Contribución Efectiva al Score Final</h4>
+              <p>Muestra la influencia real de cada componente después de ajustar por su nivel de confianza.</p>
+              <ul>
+                <li><strong>Participación Financiera:</strong> ${Math.round(shares.financial * 100)}%</li>
+                <li><strong>Participación Social:</strong> ${Math.round(shares.social * 100)}%</li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <h3>2. Componente Financiero</h3>
+              <p>Análisis de los datos económicos y contables de la empresa.</p>
+              <ul>
+                <li><strong>Score Financiero:</strong> ${financialComponent.score_1_10}/10
+                  <span class="explanation"> (Puntuación de la salud financiera de la empresa)</span></li>
+                <li><strong>Banda de Riesgo Financiero:</strong> ${financialComponent.band}
+                  <span class="explanation"> (Clasificación del riesgo basada únicamente en el análisis financiero)</span></li>
+                <li><strong>Completitud de Datos Financieros:</strong> ${Math.round(financialComponent.completeness * 100)}%
+                  <span class="explanation"> (Porcentaje de datos financieros clave que pudieron ser extraídos y analizados)</span></li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <h3>3. Componente Social</h3>
+              <p>Evaluación de la presencia y actividad de la empresa en plataformas digitales.</p>
+              <ul>
+                <li><strong>Score Social Consolidado:</strong> ${socialComponent.score_1_10}/10
+                  <span class="explanation"> (Puntuación general de la actividad y reputación digital de la empresa)</span></li>
+                <li><strong>Banda de Riesgo Social:</strong> ${socialComponent.band}
+                  <span class="explanation"> (Clasificación del riesgo basada únicamente en el análisis social)</span></li>
+              </ul>
+              <h4>Detalle por Plataforma Social</h4>
+              <p>Contribución de cada red social al score social consolidado.</p>
+              <ul>
+                ${socialComponent.per_platform.map((platform: any) => `
+                  <li><strong>${platform.platform.toUpperCase()}:</strong> ${platform.score_1_10}/10
+                    <span class="explanation"> (Puntaje de la plataforma ${platform.platform.toUpperCase()})</span>
+                    <ul>
+                      <li>Peso Base: ${Math.round(platform.base_weight * 100)}%</li>
+                      <li>Confianza: ${Math.round(platform.confidence * 100)}%</li>
+                      <li>Participación Efectiva: ${Math.round(platform.effective_weight_share * 100)}%</li>
+                    </ul>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+
+            <p class="explanation" style="text-align: center; margin-top: 2rem;">
+              Este informe es generado por un sistema de IA y debe ser complementado con un análisis humano experto.
+            </p>
+          </div>
+        </body>
+        </html>
+      `;
+      return htmlContent;
+    };
+
+    const newWindow = window.open();
+    if (newWindow) {
+      newWindow.document.write(generateHtmlReport());
+      newWindow.document.close();
+    } else {
+      toast({ title: "Error", description: "No se pudo abrir una nueva ventana. Por favor, permite pop-ups.", variant: "destructive" });
+    }
+  };
   return (
     <main className="min-h-screen pb-16">
       <section className="container mx-auto grid gap-6 lg:grid-cols-2 pt-10">
@@ -630,7 +786,7 @@ export default function Evaluar() {
               <div className="flex flex-col sm:flex-row gap-3 items-start">
                 <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
                 <Button variant="premium" onClick={() => fileRef.current?.click()}>Subir Estado Financiero</Button>
-                {uploadedName && <p className="text-sm text-muted-foreground">Adjunto: {uploadedName}</p>}
+                {uploadedName && <p className="text-sm text-muted-foreground">Archivo Cargado</p>}
               </div>
               <div className="pt-2 flex gap-2">
                 <Button variant="default" onClick={analyzeFinancialInfo} disabled={!uploadedFile || isEvaluating}>
@@ -903,6 +1059,11 @@ export default function Evaluar() {
                 <p className="text-2xl font-semibold">
                   {finalCreditScore !== null ? `${finalCreditScore}/10` : "0/10"}
                 </p>
+                <div className="pt-2">
+                  <Button variant="outline" size="sm" onClick={handleViewCreditReport} disabled={!creditScoreResult || isEvaluating}>
+                    Ver Informe
+                  </Button>
+                </div>
               </div>
 
               
